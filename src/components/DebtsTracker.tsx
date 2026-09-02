@@ -169,7 +169,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between text-right card-hover">
           <div className="flex items-center justify-between mb-2">
             <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">حسابات مفتوحة</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-lg bg-[#c5834e]/10 text-[#c5834e] dark:text-[#e0a36e] flex items-center justify-center text-xs">
               <i className="fa-solid fa-file-invoice-dollar"></i>
             </div>
           </div>
@@ -202,7 +202,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
         {/* Add/Update Form */}
         <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-3 text-right">
           <h4 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-            <i className="fa-solid fa-plus text-blue-600"></i> إضافة أو تسجيل دين جديد
+            <i className="fa-solid fa-plus text-[#c5834e]"></i> إضافة أو تسجيل دين جديد
           </h4>
 
           <form onSubmit={handleSaveDebt} className="space-y-2.5">
@@ -211,7 +211,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
               <select
                 value={debtType}
                 onChange={(e) => setDebtType(e.target.value as "لي" | "علي")}
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               >
                 <option value="لي">لي عند شخص (زبون)</option>
                 <option value="علي">علي لشخص (مورد / التزام)</option>
@@ -226,7 +226,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                 value={debtName}
                 onChange={(e) => setDebtName(e.target.value)}
                 placeholder="اسم الشخص أو التاجر"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
 
@@ -237,7 +237,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                 value={debtPhone}
                 onChange={(e) => setDebtPhone(e.target.value)}
                 placeholder="091XXXXXXX"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
 
@@ -251,7 +251,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                 value={debtAmount}
                 onChange={(e) => setDebtAmount(e.target.value === "" ? "" : Number(e.target.value))}
                 placeholder="0.0"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 font-bold"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] font-bold"
               />
             </div>
 
@@ -261,7 +261,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                 type="date"
                 value={debtDueDate}
                 onChange={(e) => setDebtDueDate(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
 
@@ -272,13 +272,13 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                 onChange={(e) => setDebtNote(e.target.value)}
                 placeholder="تفاصيل المشتريات أو ملاحظة..."
                 rows={2}
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 resize-none"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] resize-none"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 mt-1"
+              className="w-full btn-brand-bronze font-bold py-2 rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 mt-1"
             >
               <i className="fa-solid fa-floppy-disk"></i> حفظ الدين في السجل
             </button>
@@ -295,7 +295,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="ابحث بالاسم أو الهاتف أو رقم الدين..."
-                className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
 
@@ -303,7 +303,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-blue-600"
+                className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-[#c5834e]"
               >
                 <option value="">كل الأنواع (لي وعلي)</option>
                 <option value="لي">لي (عند الزبائن)</option>
@@ -313,7 +313,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-blue-600"
+                className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-[#c5834e]"
               >
                 <option value="">كل الحالات</option>
                 <option value="مفتوح">مفتوح</option>
@@ -468,7 +468,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   placeholder="أدخل قيمة الدفعة"
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 text-center font-bold transition-all"
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] text-center font-bold transition-all"
                 />
               </div>
 

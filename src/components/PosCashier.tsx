@@ -164,7 +164,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ابحث باسم السلعة أو الباركود..."
-              className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 transition-colors"
+              className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] transition-colors"
             />
           </div>
           {search && (
@@ -197,7 +197,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   className={`p-3 rounded-xl border transition-all text-right relative flex flex-col justify-between h-28 select-none ${
                     outOfStock
                       ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed"
-                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-sm cursor-pointer card-hover active:scale-[0.98]"
+                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-[#c5834e] dark:hover:border-[#c5834e] hover:shadow-sm cursor-pointer card-hover active:scale-[0.98]"
                   }`}
                 >
                   <div>
@@ -208,7 +208,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100 dark:border-slate-800">
-                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
+                    <span className="text-xs font-bold text-[#c5834e] dark:text-[#e0a36e] font-mono">
                       {prod.price.toFixed(2)} د.ل
                     </span>
                     <span
@@ -236,7 +236,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           {/* Cart Header */}
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
             <span className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <i className="fa-solid fa-basket-shopping text-blue-600"></i> سلة التجهيز الحالية (
+              <i className="fa-solid fa-basket-shopping text-[#c5834e]"></i> سلة التجهيز الحالية (
               {cart.length})
             </span>
             {cart.length > 0 && (
@@ -265,7 +265,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{item.name}</h5>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold font-mono">
+                      <span className="text-[11px] text-[#c5834e] dark:text-[#e0a36e] font-bold font-mono">
                         {(item.price * item.qty).toFixed(2)} د.ل
                       </span>
                       <span className="text-[10px] text-slate-400 font-mono">
@@ -310,7 +310,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="اسم الزبون"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
             <div>
@@ -320,7 +320,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 placeholder="091XXXXXXX"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
           </div>
@@ -333,7 +333,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 value={customerBackupPhone}
                 onChange={(e) => setCustomerBackupPhone(e.target.value)}
                 placeholder="اختياري"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
             <div>
@@ -343,7 +343,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 value={customerArea}
                 onChange={(e) => setCustomerArea(e.target.value)}
                 placeholder="المدينة / المنطقة"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               />
             </div>
           </div>
@@ -354,7 +354,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               <select
                 value={payMethod}
                 onChange={(e) => setPayMethod(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600"
+                className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
               >
                 <option value="كاش">كاش (نقدي)</option>
                 <option value="مصراتي">خدمة مصراتي</option>
@@ -371,7 +371,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 value={deliveryFee || ""}
                 onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)}
                 placeholder="0"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 text-center font-bold"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] text-center font-bold"
               />
             </div>
           </div>
@@ -397,7 +397,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   value={paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value)}
                   placeholder="0"
-                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 text-center font-bold"
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] text-center font-bold"
                 />
               </div>
             )}
@@ -437,11 +437,11 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           )}
           <div className="flex justify-between text-sm font-bold text-slate-900 dark:text-white border-t border-slate-200 dark:border-slate-800 pt-2">
             <span>صافي المطلوب:</span>
-            <span className="text-blue-600 dark:text-blue-400 text-base font-black font-mono">{cartTotal.toFixed(2)} د.ل</span>
+            <span className="text-[#c5834e] dark:text-[#e0a36e] text-base font-black font-mono">{cartTotal.toFixed(2)} د.ل</span>
           </div>
           <button
             onClick={handleSubmitOrder}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg shadow-sm text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer mt-1"
+            className="w-full btn-brand-bronze font-bold py-2.5 rounded-lg shadow-sm text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer mt-1"
           >
             <i className="fa-solid fa-circle-check"></i> تأكيد وحفظ الفاتورة
           </button>

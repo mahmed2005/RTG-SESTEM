@@ -18,7 +18,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   onRestockProduct,
   onDeleteProduct,
   showToast,
-  shopName = "RTG-SYSTEM",
+  shopName = "RTG-SESTEM",
 }) => {
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -31,6 +31,15 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [restockProductCode, setRestockProductCode] = useState<string | null>(null);
   const [stickerProductCode, setStickerProductCode] = useState<string | null>(null);
   const [deleteConfirmCode, setDeleteConfirmCode] = useState<string | null>(null);
+
+  // Quick Price Edit Modal State
+  const [quickPriceCode, setQuickPriceCode] = useState<string | null>(null);
+  const [quickPriceVal, setQuickPriceVal] = useState<number | "">("");
+  const [quickCostVal, setQuickCostVal] = useState<number | "">("");
+
+  // Quick Barcode Edit & Generator State
+  const [quickBarcodeCode, setQuickBarcodeCode] = useState<string | null>(null);
+  const [quickNewBarcode, setQuickNewBarcode] = useState<string>("");
 
   // Add Product Form State
   const [addName, setAddName] = useState("");
@@ -54,6 +63,70 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     const prefix = "RTG";
     const randomDigits = Math.floor(100000 + Math.random() * 900000);
     return `${prefix}-${randomDigits}`;
+  };
+
+  // Open Quick Price Modal
+  const handleOpenQuickPrice = (code: string) => {
+    const item = products[code];
+    if (!item) return;
+    setQuickPriceCode(code);
+    setQuickPriceVal(item.price);
+    setQuickCostVal(item.cost);
+  };
+
+  // Submit Quick Price
+  const handleSubmitQuickPrice = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickPriceCode) return;
+    const item = products[quickPriceCode];
+    if (!item) return;
+
+    const priceNum = Number(quickPriceVal);
+    const costNum = Number(quickCostVal);
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      showToast("يرجى إدخال سعر بيع صحيح", "error");
+      return;
+    }
+    const finalCost = isNaN(costNum) || costNum < 0 ? item.cost : costNum;
+
+    onUpdateProduct(quickPriceCode, quickPriceCode, {
+      ...item,
+      price: priceNum,
+      cost: finalCost,
+    });
+
+    showToast(`✓ تم تحديث سعر "${item.name}" إلى ${priceNum.toFixed(2)} د.ل`, "success");
+    setQuickPriceCode(null);
+  };
+
+  // Open Quick Barcode Modal
+  const handleOpenQuickBarcode = (code: string) => {
+    setQuickBarcodeCode(code);
+    setQuickNewBarcode(code);
+  };
+
+  // Submit Quick Barcode
+  const handleSubmitQuickBarcode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickBarcodeCode) return;
+    const item = products[quickBarcodeCode];
+    if (!item) return;
+
+    const cleanNewCode = quickNewBarcode.trim();
+    if (!cleanNewCode) {
+      showToast("يرجى إدخال كود باركود صالح", "error");
+      return;
+    }
+
+    if (cleanNewCode !== quickBarcodeCode && products[cleanNewCode]) {
+      showToast(`الباركود (${cleanNewCode}) مستخدم بالفعل لمنتج آخر!`, "error");
+      return;
+    }
+
+    onUpdateProduct(quickBarcodeCode, cleanNewCode, item);
+    showToast(`✓ تم تحديث كود الباركود للمنتج "${item.name}" إلى: ${cleanNewCode}`, "success");
+    setQuickBarcodeCode(null);
   };
 
   // Open Add Modal
@@ -228,7 +301,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   // Stats Calculations
-  const productEntries = Object.entries(products);
+  const productEntries: [string, Product][] = Object.entries(products);
   const totalItemsCount = productEntries.length;
   let totalWholesaleValue = 0;
   let totalRetailValue = 0;
@@ -278,7 +351,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between text-right card-hover">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">إجمالي الأصناف</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-lg bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-xs">
               <i className="fa-solid fa-boxes-stacked"></i>
             </div>
           </div>
@@ -340,7 +413,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-lg bg-[#c2884a]/15 text-[#c2884a] flex items-center justify-center text-base">
+            <div className="w-9 h-9 rounded-lg bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-base">
               <i className="fa-solid fa-boxes-packing"></i>
             </div>
             <div className="text-right">
@@ -363,7 +436,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
             <button
               onClick={handleOpenAddModal}
-              className="px-4 py-2 text-xs font-bold bg-[#c2884a] hover:bg-[#a36b32] text-white rounded-lg shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+              className="px-4 py-2 text-xs font-bold bg-[#c5834e] hover:bg-[#a6632f] text-white rounded-lg shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
             >
               <i className="fa-solid fa-plus"></i> إضافة منتج جديد
             </button>
@@ -379,7 +452,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ابحث بالاسم أو الباركود..."
-              className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-900 dark:text-white"
+              className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
             />
           </div>
 
@@ -387,7 +460,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as "all" | "in_stock" | "low_stock" | "out_of_stock")}
-              className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-700 dark:text-slate-300"
+              className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-700 dark:text-slate-300"
             >
               <option value="all">جميع الحالات ({totalItemsCount})</option>
               <option value="in_stock">متوفر (&gt; 3 قطع)</option>
@@ -400,7 +473,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "name" | "qty" | "price" | "cost")}
-              className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-700 dark:text-slate-300"
+              className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-700 dark:text-slate-300"
             >
               <option value="name">ترتيب: بالاسم أبجدياً</option>
               <option value="qty">ترتيب: بالأعلى كمية</option>
@@ -421,9 +494,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                 <th className="py-3 px-3.5">اسم السلعة / المنتج</th>
                 <th className="py-3 px-3 text-center">حالة المخزون والكمية</th>
                 <th className="py-3 px-3.5 text-center">سعر التكلفة (الجملة)</th>
-                <th className="py-3 px-3.5 text-center">سعر البيع</th>
+                <th className="py-3 px-3.5 text-center">سعر البيع (القطاعي)</th>
                 <th className="py-3 px-3.5 text-center">هامش الربح</th>
-                <th className="py-3 px-3.5 text-center">أزرار التحكم والإجراءات</th>
+                <th className="py-3 px-3.5 text-center">أزرار التحكم (السعر والكود والإجراءات)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
@@ -469,12 +542,19 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                       key={code}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                     >
-                      {/* Barcode */}
+                      {/* Barcode with Quick Generator/Editor Button */}
                       <td className="py-3 px-3.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                             {code}
                           </span>
+                          <button
+                            title="تغيير أو إنشاء كود باركود جديد للمنتج"
+                            onClick={() => handleOpenQuickBarcode(code)}
+                            className="text-[#c5834e] hover:text-[#a6632f] hover:bg-[#c5834e]/10 p-1 rounded text-xs cursor-pointer transition-colors"
+                          >
+                            <i className="fa-solid fa-wand-magic-sparkles"></i>
+                          </button>
                           <button
                             title="نسخ الباركود"
                             onClick={() => {
@@ -490,7 +570,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
                       {/* Name */}
                       <td className="py-3 px-3.5">
-                        <div className="font-bold text-slate-900 dark:text-white max-w-[220px] truncate" title={p.name}>
+                        <div className="font-bold text-slate-900 dark:text-white max-w-[200px] truncate" title={p.name}>
                           {p.name}
                         </div>
                       </td>
@@ -503,9 +583,19 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                         {cost.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">د.ل</span>
                       </td>
 
-                      {/* Price */}
-                      <td className="py-3 px-3.5 text-center font-mono font-bold text-[#c2884a]">
-                        {price.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">د.ل</span>
+                      {/* Price with Quick Price Edit Button */}
+                      <td className="py-3 px-3.5 text-center">
+                        <div className="inline-flex items-center justify-center gap-1 font-mono font-bold text-[#c5834e] bg-[#c5834e]/5 px-2 py-1 rounded-md border border-[#c5834e]/20">
+                          <span>{price.toFixed(2)}</span>
+                          <span className="text-[10px] font-normal text-slate-400">د.ل</span>
+                          <button
+                            onClick={() => handleOpenQuickPrice(code)}
+                            title="تعديل سريع لسعر هذا المنتج"
+                            className="text-slate-400 hover:text-[#c5834e] hover:bg-[#c5834e]/10 p-1 rounded text-xs cursor-pointer transition-colors"
+                          >
+                            <i className="fa-solid fa-pen text-[10px]"></i>
+                          </button>
+                        </div>
                       </td>
 
                       {/* Margin */}
@@ -522,37 +612,55 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                         </span>
                       </td>
 
-                      {/* Action Controls */}
+                      {/* Full Action Controls on the left after price */}
                       <td className="py-3 px-3.5">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* Full Edit Button */}
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {/* 1. Quick Price Edit */}
                           <button
-                            onClick={() => handleOpenEditModal(code)}
-                            title="تعديل كامل للمنتج (الباركود، الاسم، السعر، التكلفة)"
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            onClick={() => handleOpenQuickPrice(code)}
+                            title="تعديل سريع لسعر البيع والتكلفة"
+                            className="px-2 py-1 rounded-lg text-xs font-bold bg-[#c5834e]/10 text-[#c5834e] hover:bg-[#c5834e]/20 border border-[#c5834e]/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                           >
-                            <i className="fa-solid fa-pen-to-square"></i> تعديل
+                            <i className="fa-solid fa-tag text-[10px]"></i> السعر
                           </button>
 
-                          {/* Quick Restock (+ Quantity) */}
+                          {/* 2. Quick Barcode Generator / Changer */}
+                          <button
+                            onClick={() => handleOpenQuickBarcode(code)}
+                            title="إنشاء أو تغيير كود الباركود للمنتج"
+                            className="px-2 py-1 rounded-lg text-xs font-bold bg-[#c5834e] hover:bg-[#a6632f] text-white flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm"
+                          >
+                            <i className="fa-solid fa-barcode text-[10px]"></i> الكود
+                          </button>
+
+                          {/* 3. Comprehensive Edit Button */}
+                          <button
+                            onClick={() => handleOpenEditModal(code)}
+                            title="تعديل شامل لكافة تفاصيل المنتج"
+                            className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                          >
+                            <i className="fa-solid fa-pen-to-square text-[10px]"></i> شامل
+                          </button>
+
+                          {/* 4. Quick Restock (+ Quantity) */}
                           <button
                             onClick={() => handleOpenRestockModal(code)}
                             title="توريد وزيادة الكمية"
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            className="px-2 py-1 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                           >
-                            <i className="fa-solid fa-plus"></i> توريد
+                            <i className="fa-solid fa-plus text-[10px]"></i> توريد
                           </button>
 
-                          {/* Barcode Sticker Print */}
+                          {/* 5. Barcode Sticker Print */}
                           <button
                             onClick={() => setStickerProductCode(code)}
                             title="طباعة ملصق الباركود"
                             className="p-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer transition-all"
                           >
-                            <i className="fa-solid fa-barcode"></i>
+                            <i className="fa-solid fa-print"></i>
                           </button>
 
-                          {/* Delete Button */}
+                          {/* 6. Delete Button */}
                           <button
                             onClick={() => setDeleteConfirmCode(code)}
                             title="حذف المنتج من المخزون"
@@ -577,7 +685,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 w-full max-w-md shadow-2xl text-right space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#c2884a]/15 text-[#c2884a] flex items-center justify-center text-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-sm">
                   <i className="fa-solid fa-box-open"></i>
                 </div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">إضافة صنف / منتج جديد</h3>
@@ -602,7 +710,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
                   placeholder="مثال: ذراع تحكم بلايستيشن 5 أبيض"
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                 />
               </div>
 
@@ -618,15 +726,15 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     value={addBarcode}
                     onChange={(e) => setAddBarcode(e.target.value)}
                     placeholder="امسح بالماسح أو اكتب الكود"
-                    className="flex-1 px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-900 dark:text-white"
+                    className="flex-1 px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                   />
                   <button
                     type="button"
                     onClick={() => setAddBarcode(generateRandomBarcode())}
-                    className="px-3 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-2 text-xs font-bold bg-[#c5834e]/15 text-[#c5834e] hover:bg-[#c5834e]/25 rounded-lg border border-[#c5834e]/30 flex items-center gap-1 cursor-pointer transition-colors"
                     title="توليد كود تلقائي"
                   >
-                    <i className="fa-solid fa-wand-magic-sparkles text-[#c2884a]"></i> توليد
+                    <i className="fa-solid fa-wand-magic-sparkles"></i> توليد
                   </button>
                 </div>
               </div>
@@ -645,7 +753,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     value={addCost}
                     onChange={(e) => setAddCost(e.target.value === "" ? "" : Number(e.target.value))}
                     placeholder="0.00"
-                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -661,7 +769,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     value={addPrice}
                     onChange={(e) => setAddPrice(e.target.value === "" ? "" : Number(e.target.value))}
                     placeholder="0.00"
-                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -679,7 +787,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                   value={addQty}
                   onChange={(e) => setAddQty(e.target.value === "" ? "" : Number(e.target.value))}
                   placeholder="1"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c2884a] text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                 />
               </div>
 
@@ -696,7 +804,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <button
                   type="submit"
-                  className="bg-[#c2884a] hover:bg-[#a36b32] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                  className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
                 >
                   <i className="fa-solid fa-floppy-disk"></i> حفظ وإضافة للمخزون
                 </button>
@@ -713,13 +821,202 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
       )}
 
+      {/* ===================== MODAL 1.1: QUICK PRICE EDIT MODAL ===================== */}
+      {quickPriceCode && products[quickPriceCode] && (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeInUp">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 w-full max-w-sm shadow-2xl text-right space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-sm">
+                  <i className="fa-solid fa-tag"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">تعديل سريع للأسعار</h3>
+                  <p className="text-[10px] text-slate-400">تحديث سعر البيع والتكلفة فورياً</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuickPriceCode(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm cursor-pointer p-1"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                {products[quickPriceCode].name}
+              </div>
+              <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-mono">
+                <span>الباركود:</span>
+                <span className="bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-800 dark:text-slate-200 font-bold">
+                  {quickPriceCode}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitQuickPrice} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  سعر البيع (القطاعي) *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0.05"
+                    step="0.05"
+                    required
+                    autoFocus
+                    value={quickPriceVal}
+                    onChange={(e) => setQuickPriceVal(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="w-full pl-10 pr-3 py-2 text-sm font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">د.ل</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  سعر التكلفة (الجملة)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.05"
+                    value={quickCostVal}
+                    onChange={(e) => setQuickCostVal(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="w-full pl-10 pr-3 py-2 text-sm font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">د.ل</span>
+                </div>
+              </div>
+
+              {/* Profit Preview */}
+              {Number(quickPriceVal) > 0 && (
+                <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-2.5 text-xs flex items-center justify-between">
+                  <span className="text-emerald-800 dark:text-emerald-300 font-medium">هامش الربح المتوقع:</span>
+                  <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400">
+                    +{(Number(quickPriceVal) - Number(quickCostVal || 0)).toFixed(2)} د.ل
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="submit"
+                  className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                >
+                  <i className="fa-solid fa-check"></i> حفظ السعر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickPriceCode(null)}
+                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer transition-all"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL 1.2: QUICK BARCODE GENERATOR & CHANGER ===================== */}
+      {quickBarcodeCode && products[quickBarcodeCode] && (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeInUp">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 w-full max-w-sm shadow-2xl text-right space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-sm">
+                  <i className="fa-solid fa-barcode"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">تغيير وإنشاء كود الباركود</h3>
+                  <p className="text-[10px] text-slate-400">توليد كود تلقائي أو تخصيص يدوي</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuickBarcodeCode(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm cursor-pointer p-1"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                {products[quickBarcodeCode].name}
+              </div>
+              <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500 font-mono">
+                <span>الكود الحالي:</span>
+                <span className="bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-800 dark:text-slate-200 font-bold">
+                  {quickBarcodeCode}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitQuickBarcode} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  كود الباركود الجديد *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={quickNewBarcode}
+                    onChange={(e) => setQuickNewBarcode(e.target.value)}
+                    placeholder="اكتب الكود أو ولده تلقائياً"
+                    className="flex-1 px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuickNewBarcode(generateRandomBarcode())}
+                    className="px-3 py-2 text-xs font-bold bg-[#c5834e]/15 text-[#c5834e] hover:bg-[#c5834e]/25 rounded-lg border border-[#c5834e]/30 flex items-center gap-1 cursor-pointer transition-colors"
+                    title="توليد كود تلقائي جديد"
+                  >
+                    <i className="fa-solid fa-wand-magic-sparkles"></i> توليد
+                  </button>
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+                <span className="text-[10px] text-slate-400 block mb-1">معاينة رمز الباركود</span>
+                <span className="font-mono text-sm font-black tracking-widest text-slate-900 dark:text-white">
+                  {quickNewBarcode || "---"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="submit"
+                  className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                >
+                  <i className="fa-solid fa-check"></i> حفظ الكود الجديد
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickBarcodeCode(null)}
+                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer transition-all"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ===================== MODAL 2: FULL EDIT PRODUCT ===================== */}
       {editProductCode && (
         <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeInUp">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 w-full max-w-md shadow-2xl text-right space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-sm">
                   <i className="fa-solid fa-pen-to-square"></i>
                 </div>
                 <div>
@@ -746,7 +1043,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-blue-600 text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                 />
               </div>
 
@@ -761,7 +1058,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     required
                     value={editBarcode}
                     onChange={(e) => setEditBarcode(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-blue-600 text-slate-900 dark:text-white"
+                    className="flex-1 px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                   />
                   <button
                     type="button"
@@ -769,7 +1066,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     className="px-3 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1 cursor-pointer"
                     title="توليد كود جديد"
                   >
-                    <i className="fa-solid fa-wand-magic-sparkles text-blue-600"></i> جديد
+                    <i className="fa-solid fa-wand-magic-sparkles text-[#c5834e]"></i> جديد
                   </button>
                 </div>
               </div>
@@ -787,7 +1084,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     required
                     value={editCost}
                     onChange={(e) => setEditCost(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-blue-600 text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -802,7 +1099,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     required
                     value={editPrice}
                     onChange={(e) => setEditPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-blue-600 text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -819,14 +1116,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                   required
                   value={editQty}
                   onChange={(e) => setEditQty(e.target.value === "" ? "" : Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-blue-600 text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-[#c5834e] text-slate-900 dark:text-white"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                  className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
                 >
                   <i className="fa-solid fa-check"></i> حفظ التعديلات
                 </button>
@@ -936,7 +1233,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 w-full max-w-sm shadow-2xl text-center space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                <i className="fa-solid fa-barcode text-[#c2884a]"></i> طباعة ملصق الباركود
+                <i className="fa-solid fa-barcode text-[#c5834e]"></i> طباعة ملصق الباركود
               </h3>
               <button
                 onClick={() => setStickerProductCode(null)}
@@ -1000,7 +1297,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                 onClick={() => {
                   window.print();
                 }}
-                className="bg-[#c2884a] hover:bg-[#a36b32] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 <i className="fa-solid fa-print"></i> طباعة الملصق
               </button>

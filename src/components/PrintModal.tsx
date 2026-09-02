@@ -40,9 +40,9 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
         >
           <div className="text-center space-y-1">
             <RtgLogo size="print" />
-            <h3 className="text-sm font-black text-black">RTG GEARX</h3>
+            <h3 className="text-sm font-black text-black">RTG-SESTEM</h3>
             <p className="text-[10px] text-slate-600 font-bold">
-              {shopName || "MOBILE & GAMING ACCESSORIES"}
+              {shopName || "منظومة إدارة المبيعات"}
             </p>
           </div>
 
@@ -127,7 +127,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
 
           <div className="text-center text-[9px] text-slate-500 space-y-0.5 pt-1">
             <p>شكراً لتسوقكم وثقتكم بنا!</p>
-            <p>RTG GEARX — واتساب: 0934590635</p>
+            <p>RTG-SESTEM — واتساب: 0934590635</p>
           </div>
         </div>
 

@@ -1,140 +1,269 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
-@layer base {
-  :root {
-    --brand-bronze: #c2884a;
-    --brand-bronze-light: #e5a968;
-    --brand-bronze-dark: #854d0e;
-    --brand-silver: #94a3b8;
-    --brand-silver-light: #e2e8f0;
-    --brand-silver-dark: #334155;
-    --brand-primary: #2563eb;
-    --brand-primary-hover: #1d4ed8;
-    --brand-accent-red: #ef4444;
-    --brand-accent-emerald: #10b981;
-    --brand-accent-amber: #f59e0b;
-  }
+:root {
+  --brand-bronze: #c5834e;
+  --brand-bronze-light: #d99866;
+  --brand-bronze-dark: #9a6039;
+  --brand-bronze-glow: rgba(197, 131, 78, 0.25);
+  --brand-silver: #94a3b8;
+  --brand-silver-light: #cbd5e1;
+  --brand-silver-dark: #475569;
+  --brand-charcoal: #0b0e17;
+  --brand-surface: #121725;
+  --brand-card: #182032;
+  --brand-border: #232d42;
 }
 
 body {
   font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #0b0f19;
+  background-color: #0b0e17;
   color: #f1f5f9;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* Explicit Dark Mode Base */
+html.dark,
+html.dark body,
+body.dark {
+  background-color: #0b0e17 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Sidebar & Navigation Dark Mode */
+html.dark aside,
+body.dark aside,
+.dark aside,
+aside.sidebar-nav {
+  background-color: #0d121f !important;
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark header,
+body.dark header,
+.dark header {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+html.dark #mainNav,
+body.dark #mainNav,
+.dark #mainNav {
+  background-color: #0d121f !important;
+  border-color: #1e293b !important;
+}
+
+html.dark .sidebar-footer {
+  background-color: #070a12 !important;
+  border-color: #1e293b !important;
+}
+
+/* Sidebar & Navigation Light Mode */
+html.light aside,
+body.light-mode aside {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+html.light header,
+body.light-mode header {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light #mainNav,
+body.light-mode #mainNav {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .sidebar-footer {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
 /* Light Mode Overrides */
+html.light,
 html.light body,
 body.light-mode {
   background-color: #f8fafc !important;
   color: #0f172a !important;
 }
 
-body.light-mode .bg-slate-950,
-html.light .bg-slate-950 {
+/* Surfaces and Cards in Light Mode */
+html.light .bg-slate-950,
+body.light-mode .bg-slate-950 {
   background-color: #f1f5f9 !important;
 }
 
+html.light .bg-slate-900,
 body.light-mode .bg-slate-900,
-html.light .bg-slate-900 {
-  background-color: #ffffff !important;
-}
-
-body.light-mode .bg-slate-900\/90,
-body.light-mode .bg-slate-900\/80,
+html.light .bg-slate-900\/95,
+body.light-mode .bg-slate-900\/95,
 html.light .bg-slate-900\/90,
-html.light .bg-slate-900\/80 {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-}
-
-body.light-mode .bg-\[\#1e293b\],
-body.light-mode .bg-\[\#131b2e\],
-body.light-mode .bg-\[\#0b0f19\],
-body.light-mode .bg-brand-cardBg,
-html.light .bg-\[\#1e293b\],
-html.light .bg-\[\#131b2e\],
-html.light .bg-\[\#0b0f19\] {
+body.light-mode .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+body.light-mode .bg-slate-900\/80 {
   background-color: #ffffff !important;
 }
 
-body.light-mode .text-white,
-html.light .text-white {
-  color: #0f172a !important;
+html.light .bg-\[\#1e293b\],
+body.light-mode .bg-\[\#1e293b\],
+html.light .bg-\[\#131b2e\],
+body.light-mode .bg-\[\#131b2e\],
+html.light .bg-\[\#0b0f19\],
+body.light-mode .bg-\[\#0b0f19\],
+html.light .bg-\[\#0b0e17\],
+body.light-mode .bg-\[\#0b0e17\] {
+  background-color: #ffffff !important;
 }
 
-body.light-mode .text-slate-100,
-body.light-mode .text-slate-200,
-body.light-mode .text-slate-300,
+/* Text in Light Mode - except on buttons, badges, and colored pills */
+html.light h1:not([class*="btn"]):not([class*="bg-"]),
+html.light h2:not([class*="btn"]):not([class*="bg-"]),
+html.light h3:not([class*="btn"]):not([class*="bg-"]),
+html.light h4:not([class*="btn"]):not([class*="bg-"]),
+html.light p.text-white,
+html.light span.text-white:not([class*="badge"]):not([class*="btn"]):not([class*="bg-"]),
+body.light-mode p.text-white {
+  color: #0f172a;
+}
+
+/* Ensure buttons and colored badges ALWAYS keep white text in both light and dark mode */
+.text-white,
+button.text-white,
+a.text-white,
+.btn-brand-bronze,
+.btn-brand-silver,
+[class*="bg-red-"] .text-white,
+[class*="bg-emerald-"] .text-white,
+[class*="bg-amber-"] .text-white,
+[class*="bg-blue-"] .text-white,
+.bg-red-600,
+.bg-emerald-600,
+.bg-amber-500,
+.bg-blue-600,
+.bg-\[\#c5834e\],
+.badge-white {
+  color: #ffffff !important;
+}
+
 html.light .text-slate-100,
+body.light-mode .text-slate-100,
 html.light .text-slate-200,
-html.light .text-slate-300 {
+body.light-mode .text-slate-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-300,
+body.light-mode .text-slate-300 {
   color: #334155 !important;
 }
 
-body.light-mode .text-slate-400,
-html.light .text-slate-400 {
+html.light .text-slate-400,
+body.light-mode .text-slate-400 {
   color: #64748b !important;
 }
 
-body.light-mode .text-slate-500,
-html.light .text-slate-500 {
+html.light .text-slate-500,
+body.light-mode .text-slate-500 {
   color: #64748b !important;
 }
 
-body.light-mode .border-slate-800,
-body.light-mode .border-slate-700,
+/* Borders in Light Mode */
 html.light .border-slate-800,
-html.light .border-slate-700 {
+body.light-mode .border-slate-800,
+html.light .border-slate-700,
+body.light-mode .border-slate-700 {
   border-color: #e2e8f0 !important;
 }
 
-body.light-mode input,
-body.light-mode select,
-body.light-mode textarea,
+/* Form Inputs in Light Mode */
 html.light input,
+body.light-mode input,
 html.light select,
-html.light textarea {
+body.light-mode select,
+html.light textarea,
+body.light-mode textarea {
   background-color: #ffffff !important;
   color: #0f172a !important;
   border-color: #cbd5e1 !important;
 }
 
-body.light-mode input::placeholder,
-body.light-mode textarea::placeholder,
 html.light input::placeholder,
-html.light textarea::placeholder {
+body.light-mode input::placeholder,
+html.light textarea::placeholder,
+body.light-mode textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-body.light-mode .hover\:bg-slate-800:hover,
-html.light .hover\:bg-slate-800:hover {
+/* Hover States in Light Mode */
+html.light .hover\:bg-slate-800:hover,
+body.light-mode .hover\:bg-slate-800:hover {
   background-color: #f1f5f9 !important;
 }
 
-body.light-mode .hover\:bg-slate-700:hover,
-html.light .hover\:bg-slate-700:hover {
+html.light .hover\:bg-slate-700:hover,
+body.light-mode .hover\:bg-slate-700:hover {
   background-color: #e2e8f0 !important;
 }
 
+/* Header & Nav in Light Mode */
+html.light header,
 body.light-mode header,
-html.light header {
+html.light nav,
+body.light-mode nav {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
 }
 
-body.light-mode .shadow-sm,
-html.light .shadow-sm {
+/* Shadows in Light Mode */
+html.light .shadow-sm,
+body.light-mode .shadow-sm {
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
 }
 
-body.light-mode .shadow-md,
-body.light-mode .shadow-xl,
-body.light-mode .shadow-2xl,
 html.light .shadow-md,
+body.light-mode .shadow-md,
 html.light .shadow-xl,
-html.light .shadow-2xl {
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.07), 0 8px 10px -6px rgba(15, 23, 42, 0.03) !important;
+body.light-mode .shadow-xl,
+html.light .shadow-2xl,
+body.light-mode .shadow-2xl {
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.03) !important;
+}
+
+/* Brand Buttons & Accents */
+.btn-brand-bronze {
+  background: linear-gradient(135deg, #c5834e 0%, #a6632f 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(197, 131, 78, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-brand-bronze:hover {
+  background: linear-gradient(135deg, #d99866 0%, #b8733a 100%);
+  box-shadow: 0 6px 20px rgba(197, 131, 78, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-brand-bronze:active {
+  transform: scale(0.98);
+}
+
+.btn-brand-silver {
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  color: #f1f5f9;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-brand-silver:hover {
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
 }
 
 /* Scrollbar styling */
@@ -194,6 +323,19 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 .animate-fadeInUp {
   animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(197, 131, 78, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(197, 131, 78, 0.6);
+  }
+}
+
+.glow-brand {
+  animation: pulseGlow 3s infinite ease-in-out;
 }
 
 /* Print style */

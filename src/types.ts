@@ -55,3 +55,19 @@ export interface ToastMessage {
 }
 
 export type ActiveTab = "pos" | "orders" | "inventory" | "dashboard" | "debts";
+
+export interface StoreSubscriber {
+  id: string;
+  storeCode: string;
+  username: string;
+  password: string;
+  storeName: string;
+  phone: string;
+  cloudUrl: string;
+  startDate: string;
+  endDate: string;
+  plan: "تجريبي" | "شهري" | "سنوي" | "دائم VIP";
+  status: "نشط" | "منتهي الصلاحية" | "معلق";
+  notes?: string;
+  createdAt?: string;
+}

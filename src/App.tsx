@@ -6,8 +6,17 @@ import {
   Debt,
   ToastMessage,
   ActiveTab,
+  StoreSubscriber,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_DEBTS } from "./data/initialData";
+import {
+  loadSubscribers,
+  saveSubscribers,
+  loadAdminPassword,
+  saveAdminPassword,
+  loadMasterScriptUrl,
+  saveMasterScriptUrl,
+} from "./data/initialStores";
 import { RtgLogo } from "./components/RtgLogo";
 import { ToastContainer } from "./components/ToastContainer";
 import { SplashScreen } from "./components/SplashScreen";
@@ -22,6 +31,8 @@ import { DebtsTracker } from "./components/DebtsTracker";
 import { PrintModal } from "./components/PrintModal";
 import { ReturnModal } from "./components/ReturnModal";
 import { LogoutModal } from "./components/LogoutModal";
+import { AdminDashboard } from "./components/AdminDashboard";
+import { AdminLoginModal } from "./components/AdminLoginModal";
 
 const STORAGE_KEYS = {
   PRODUCTS: "rtg_offline_products_v2",
@@ -35,19 +46,67 @@ const STORAGE_KEYS = {
 
 export default function App() {
   // App view state
-  const [screen, setScreen] = useState<"splash" | "landing" | "app">("splash");
+  const [screen, setScreen] = useState<"splash" | "landing" | "app" | "admin">("splash");
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("pos");
+
+  // Subscribers and Admin State
+  const [subscribers, setSubscribers] = useState<StoreSubscriber[]>(() => loadSubscribers());
+  const [adminPassword, setAdminPassword] = useState<string>(() => loadAdminPassword());
+  const [masterScriptUrl, setMasterScriptUrl] = useState<string>(() => loadMasterScriptUrl());
+
+  useEffect(() => {
+    saveSubscribers(subscribers);
+  }, [subscribers]);
+
+  const handleAddSubscriber = (sub: StoreSubscriber) => {
+    setSubscribers((prev) => [sub, ...prev]);
+  };
+
+  const handleUpdateSubscriber = (id: string, updated: StoreSubscriber) => {
+    setSubscribers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+  };
+
+  const handleDeleteSubscriber = (id: string) => {
+    setSubscribers((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleChangeAdminPassword = (newPass: string) => {
+    setAdminPassword(newPass);
+    saveAdminPassword(newPass);
+  };
+
+  const handleSaveMasterScriptUrl = (url: string) => {
+    setMasterScriptUrl(url);
+    saveMasterScriptUrl(url);
+  };
+
+  // Login as store from Admin Panel
+  const handleLoginAsStore = (sub: StoreSubscriber) => {
+    localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, sub.storeCode);
+    localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, sub.cloudUrl || masterScriptUrl);
+    localStorage.setItem(STORAGE_KEYS.SHOP_NAME, sub.storeName);
+
+    setApiUrl(sub.cloudUrl || masterScriptUrl);
+    setShopName(sub.storeName);
+    setIsDemoMode(false);
+    setScreen("app");
+    showToast(`✓ تم الانتقال المباشر لمتجر "${sub.storeName}"`, "success");
+  };
 
   // Shop & API credentials
   const [apiUrl, setApiUrl] = useState<string>("");
-  const [shopName, setShopName] = useState<string>("RTG GEARX");
+  const [shopName, setShopName] = useState<string>("RTG-SESTEM");
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Theme
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  // Theme - loaded properly from storage
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.THEME);
+    return saved === "light" ? "light" : "dark";
+  });
 
   // Main Entities
   const [products, setProducts] = useState<ProductsMap>(() => {
@@ -128,10 +187,17 @@ export default function App() {
   useEffect(() => {
     const savedTheme = (localStorage.getItem(STORAGE_KEYS.THEME) as "dark" | "light") || "dark";
     setTheme(savedTheme);
+    const root = document.documentElement;
     if (savedTheme === "light") {
+      root.classList.remove("dark");
+      root.classList.add("light");
+      document.body.classList.remove("dark");
       document.body.classList.add("light-mode");
     } else {
+      root.classList.remove("light");
+      root.classList.add("dark");
       document.body.classList.remove("light-mode");
+      document.body.classList.add("dark");
     }
 
     const savedKey = localStorage.getItem(STORAGE_KEYS.LICENSE_KEY);
@@ -144,15 +210,23 @@ export default function App() {
     }
   }, []);
 
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem(STORAGE_KEYS.THEME, nextTheme);
-    if (nextTheme === "light") {
+  // Apply theme dynamically to root document element and localStorage
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "light") {
+      root.classList.remove("dark");
+      root.classList.add("light");
       document.body.classList.add("light-mode");
     } else {
+      root.classList.remove("light");
+      root.classList.add("dark");
       document.body.classList.remove("light-mode");
     }
+    localStorage.setItem(STORAGE_KEYS.THEME, theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
   // Splash complete callback
@@ -168,7 +242,7 @@ export default function App() {
   // Demo Mode entry
   const handleEnterDemo = () => {
     setIsDemoMode(true);
-    setShopName("متجر تجريبي — RTG GEARX");
+    setShopName("متجر تجريبي — RTG-SESTEM");
     setProducts(INITIAL_PRODUCTS);
     setOrders(INITIAL_ORDERS);
     setDebts(INITIAL_DEBTS);
@@ -181,14 +255,15 @@ export default function App() {
     licenseKey: string,
     scriptUrl: string,
     verifiedShopName: string,
-    _email: string
+    _email: string,
+    subscriber?: StoreSubscriber
   ) => {
     localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, licenseKey);
     localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, scriptUrl);
     localStorage.setItem(STORAGE_KEYS.SHOP_NAME, verifiedShopName);
 
-    setApiUrl(scriptUrl);
-    setShopName(verifiedShopName);
+    setApiUrl(subscriber?.cloudUrl || scriptUrl);
+    setShopName(subscriber?.storeName || verifiedShopName);
     setIsDemoMode(false);
     setIsLoginOpen(false);
     setScreen("app");
@@ -321,16 +396,27 @@ export default function App() {
 
   // Inventory Handlers
   const handleAddProduct = (
-    barcode: string,
-    name: string,
-    qty: number,
-    cost: number,
-    price: number
+    codeOrBarcode: string,
+    productOrName: Product | string,
+    qty?: number,
+    cost?: number,
+    price?: number
   ) => {
-    const newProd: Product = { name, qty, cost, price };
+    let finalProduct: Product;
+    if (typeof productOrName === "object") {
+      finalProduct = productOrName;
+    } else {
+      finalProduct = {
+        name: productOrName,
+        qty: qty ?? 1,
+        cost: cost ?? 0,
+        price: price ?? 0,
+      };
+    }
+
     setProducts((prev) => ({
       ...prev,
-      [barcode]: newProd,
+      [codeOrBarcode]: finalProduct,
     }));
 
     if (apiUrl && !isDemoMode) {
@@ -339,7 +425,67 @@ export default function App() {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "addProduct", barcode, name, qty, cost, price }),
+          body: JSON.stringify({
+            action: "addProduct",
+            barcode: codeOrBarcode,
+            name: finalProduct.name,
+            qty: finalProduct.qty,
+            cost: finalProduct.cost,
+            price: finalProduct.price,
+          }),
+        }).catch(() => {});
+      } catch {
+        // silently handled
+      }
+    }
+  };
+
+  const handleUpdateProduct = (oldCode: string, newCode: string, product: Product) => {
+    setProducts((prev) => {
+      const next = { ...prev };
+      if (oldCode !== newCode) {
+        delete next[oldCode];
+      }
+      next[newCode] = product;
+      return next;
+    });
+
+    if (apiUrl && !isDemoMode) {
+      try {
+        fetch(apiUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "updateProduct",
+            oldBarcode: oldCode,
+            barcode: newCode,
+            name: product.name,
+            qty: product.qty,
+            cost: product.cost,
+            price: product.price,
+          }),
+        }).catch(() => {});
+      } catch {
+        // silently handled
+      }
+    }
+  };
+
+  const handleDeleteProduct = (code: string) => {
+    setProducts((prev) => {
+      const next = { ...prev };
+      delete next[code];
+      return next;
+    });
+
+    if (apiUrl && !isDemoMode) {
+      try {
+        fetch(apiUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "deleteProduct", barcode: code }),
         }).catch(() => {});
       } catch {
         // silently handled
@@ -498,7 +644,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-blue-600 selection:text-white" dir="rtl">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#c5834e] selection:text-white" dir="rtl">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       {/* Screen 1: Splash Screen */}
@@ -510,6 +656,24 @@ export default function App() {
           onOpenLogin={() => setIsLoginOpen(true)}
           onEnterDemo={handleEnterDemo}
           onOpenRegister={() => setIsRegisterOpen(true)}
+          onOpenAdmin={() => setIsAdminLoginOpen(true)}
+        />
+      )}
+
+      {/* Screen: Admin Dashboard */}
+      {screen === "admin" && (
+        <AdminDashboard
+          subscribers={subscribers}
+          onAddSubscriber={handleAddSubscriber}
+          onUpdateSubscriber={handleUpdateSubscriber}
+          onDeleteSubscriber={handleDeleteSubscriber}
+          onLoginAsStore={handleLoginAsStore}
+          onClose={() => setScreen("landing")}
+          adminPassword={adminPassword}
+          onChangeAdminPassword={handleChangeAdminPassword}
+          masterScriptUrl={masterScriptUrl}
+          onSaveMasterScriptUrl={handleSaveMasterScriptUrl}
+          showToast={showToast}
         />
       )}
 
@@ -517,12 +681,12 @@ export default function App() {
       {screen === "app" && (
         <div className="min-h-screen flex flex-col lg:flex-row w-full overflow-x-hidden">
           {/* Desktop Professional Sidebar */}
-          <aside className="hidden lg:flex w-64 bg-slate-900 text-slate-300 flex-col shrink-0 border-l border-slate-800 z-40 sticky top-0 h-screen">
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          <aside className="hidden lg:flex w-64 bg-white dark:bg-[#0d121f] text-slate-700 dark:text-slate-300 flex-col shrink-0 border-l border-slate-200 dark:border-slate-800 z-40 sticky top-0 h-screen transition-colors duration-200">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <RtgLogo size="header" />
                 <div className="text-right">
-                  <h1 className="text-sm font-black tracking-tight text-white">منظومة RTG</h1>
+                  <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white">RTG-SESTEM</h1>
                   <p className="text-[10px] text-slate-400 font-medium truncate max-w-[120px]" title={shopName}>
                     {shopName}
                   </p>
@@ -539,30 +703,30 @@ export default function App() {
                 onClick={() => setActiveTab("pos")}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "pos"
-                    ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-600 shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <i className="fa-solid fa-cash-register text-sm w-4 text-center"></i>
                   <span>كشير البيع المباشر</span>
                 </div>
-                <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">POS</span>
+                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400">POS</span>
               </button>
 
               <button
                 onClick={() => setActiveTab("orders")}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "orders"
-                    ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-600 shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <i className="fa-solid fa-receipt text-sm w-4 text-center"></i>
                   <span>سجل الفواتير</span>
                 </div>
-                <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-mono">
+                <span className="text-[10px] bg-[#c5834e]/20 text-[#c5834e] px-2 py-0.5 rounded-full font-mono font-bold">
                   {orders.length}
                 </span>
               </button>
@@ -571,15 +735,15 @@ export default function App() {
                 onClick={() => setActiveTab("inventory")}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "inventory"
-                    ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-600 shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <i className="fa-solid fa-boxes-stacked text-sm w-4 text-center"></i>
                   <span>إدارة المخزن والجرد</span>
                 </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 font-mono">
+                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400 font-mono">
                   {Object.keys(products).length}
                 </span>
               </button>
@@ -592,8 +756,8 @@ export default function App() {
                 onClick={() => setActiveTab("dashboard")}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "dashboard"
-                    ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-600 shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -606,28 +770,28 @@ export default function App() {
                 onClick={() => setActiveTab("debts")}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "debts"
-                    ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-600 shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <i className="fa-solid fa-hand-holding-dollar text-sm w-4 text-center"></i>
                   <span>سجل الديون والمعاملات</span>
                 </div>
-                <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-mono">
+                <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full font-mono font-bold">
                   {debts.length}
                 </span>
               </button>
             </nav>
 
             {/* Sidebar User Footer */}
-            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 mt-auto flex items-center justify-between">
+            <div className="p-4 bg-slate-50 dark:bg-slate-950/70 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-xs text-white font-bold shadow-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#c5834e] flex items-center justify-center text-xs text-white font-bold shadow-sm">
                   RTG
                 </div>
                 <div className="flex flex-col text-right">
-                  <span className="text-xs text-white font-bold truncate max-w-[110px]">
+                  <span className="text-xs text-slate-900 dark:text-white font-bold truncate max-w-[110px]">
                     {isDemoMode ? "وضع تجريبي" : shopName}
                   </span>
                   <span className="text-[10px] text-slate-400">
@@ -637,7 +801,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => setIsLogoutOpen(true)}
-                className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+                className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center justify-center transition-colors cursor-pointer"
                 title="تسجيل الخروج"
               >
                 <i className="fa-solid fa-power-off text-xs"></i>
@@ -650,15 +814,15 @@ export default function App() {
             {/* Top Professional Header */}
             <header
               id="mainHeader"
-              className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-sm sticky top-0 z-30"
+              className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-sm sticky top-0 z-30 transition-colors duration-200"
             >
               <div className="flex items-center gap-3">
                 <div className="lg:hidden flex items-center gap-2">
                   <RtgLogo size="header" />
-                  <span className="text-xs font-black text-slate-900 dark:text-white">RTG</span>
+                  <span className="text-xs font-black text-slate-900 dark:text-white">RTG-SESTEM</span>
                 </div>
                 <h1 className="hidden sm:block text-sm sm:text-base font-bold text-slate-800 dark:text-white">
-                  مرحباً بك في المنظومة المتكاملة
+                  منظومة RTG-SESTEM المتكاملة
                 </h1>
                 {isDemoMode ? (
                   <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full border border-amber-200 dark:border-amber-500/20 flex items-center gap-1.5">
@@ -682,19 +846,19 @@ export default function App() {
                 <div className="flex items-center gap-1.5 border-r border-slate-200 dark:border-slate-800 pr-2 sm:pr-4">
                   <button
                     onClick={toggleTheme}
-                    className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                     title="تبديل الوضع (نهاري / ليلي)"
                   >
-                    <i className={`fa-solid ${theme === "light" ? "fa-sun text-amber-500" : "fa-moon"} text-xs`}></i>
+                    <i className={`fa-solid ${theme === "light" ? "fa-sun text-amber-500" : "fa-moon text-[#c5834e]"} text-xs`}></i>
                   </button>
 
                   <button
                     onClick={handleSyncData}
                     disabled={isSyncing}
-                    className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                     title="مزامنة البيانات"
                   >
-                    <i className={`fa-solid fa-rotate ${isSyncing ? "fa-spin text-blue-600" : ""} text-xs`}></i>
+                    <i className={`fa-solid fa-rotate ${isSyncing ? "fa-spin text-[#c5834e]" : ""} text-xs`}></i>
                   </button>
 
                   <button
@@ -711,7 +875,7 @@ export default function App() {
             {/* Mobile / Tablet Horizontal Navigation Bar */}
             <nav
               id="mainNav"
-              className="lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-2 py-1.5 sticky top-16 z-20"
+              className="lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-2 py-1.5 sticky top-16 z-20 transition-colors duration-200"
             >
               <div className="wheel-container no-scrollbar max-w-full">
                 <div className="wheel-item">
@@ -719,7 +883,7 @@ export default function App() {
                     onClick={() => setActiveTab("pos")}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       activeTab === "pos"
-                        ? "bg-blue-600 text-white shadow-sm"
+                        ? "bg-[#c5834e] text-white shadow-sm font-black"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -732,7 +896,7 @@ export default function App() {
                     onClick={() => setActiveTab("orders")}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       activeTab === "orders"
-                        ? "bg-blue-600 text-white shadow-sm"
+                        ? "bg-[#c5834e] text-white shadow-sm font-black"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -745,7 +909,7 @@ export default function App() {
                     onClick={() => setActiveTab("inventory")}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       activeTab === "inventory"
-                        ? "bg-blue-600 text-white shadow-sm"
+                        ? "bg-[#c5834e] text-white shadow-sm font-black"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -758,7 +922,7 @@ export default function App() {
                     onClick={() => setActiveTab("dashboard")}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       activeTab === "dashboard"
-                        ? "bg-blue-600 text-white shadow-sm"
+                        ? "bg-[#c5834e] text-white shadow-sm font-black"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -771,7 +935,7 @@ export default function App() {
                     onClick={() => setActiveTab("debts")}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       activeTab === "debts"
-                        ? "bg-blue-600 text-white shadow-sm"
+                        ? "bg-[#c5834e] text-white shadow-sm font-black"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -805,9 +969,12 @@ export default function App() {
                 <InventoryManager
                   products={products}
                   onAddProduct={handleAddProduct}
+                  onUpdateProduct={handleUpdateProduct}
                   onRestockProduct={handleRestockProduct}
+                  onDeleteProduct={handleDeleteProduct}
                   onUpdatePrice={handleUpdatePrice}
                   showToast={showToast}
+                  shopName={shopName}
                 />
               )}
 
@@ -832,6 +999,19 @@ export default function App() {
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
         onSuccess={handleLoginSuccess}
+        showToast={showToast}
+        subscribers={subscribers}
+        masterScriptUrl={masterScriptUrl}
+      />
+
+      <AdminLoginModal
+        isOpen={isAdminLoginOpen}
+        onClose={() => setIsAdminLoginOpen(false)}
+        onSuccess={() => {
+          setIsAdminLoginOpen(false);
+          setScreen("admin");
+        }}
+        adminPassword={adminPassword}
         showToast={showToast}
       />
 

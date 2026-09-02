@@ -74,12 +74,12 @@ export const OrdersList: React.FC<OrdersListProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ابحث برقم الفاتورة (#RTG-...)، اسم الزبون، أو رقم الهاتف..."
-              className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-blue-600 dark:focus:border-blue-500 transition-colors"
+              className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] transition-colors"
             />
           </div>
           <button
             onClick={exportCSV}
-            className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-[#c5834e] dark:text-[#e0a36e] bg-[#c5834e]/10 border border-[#c5834e]/30 hover:bg-[#c5834e]/20 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
           >
             <i className="fa-solid fa-file-excel text-xs"></i> تصدير البيانات (CSV)
           </button>
@@ -89,7 +89,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-blue-600"
+            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-[#c5834e]"
           >
             <option value="">جميع الحالات</option>
             <option value="في الانتظار">في الانتظار</option>
@@ -101,7 +101,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           <select
             value={methodFilter}
             onChange={(e) => setMethodFilter(e.target.value)}
-            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-blue-600"
+            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-[#c5834e]"
           >
             <option value="">جميع طرق الدفع</option>
             <option value="كاش">كاش نقدي</option>
@@ -115,7 +115,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-blue-600"
+            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg outline-none focus:border-[#c5834e]"
           />
         </div>
       </div>
@@ -124,7 +124,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <h3 className="font-bold text-slate-800 dark:text-white uppercase text-xs sm:text-sm tracking-wide flex items-center gap-2">
-            <i className="fa-solid fa-list-check text-blue-600"></i> سجل العمليات والفواتير
+            <i className="fa-solid fa-list-check text-[#c5834e]"></i> سجل العمليات والفواتير
           </h3>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
             {filteredOrders.length} فاتورة مسجلة
@@ -182,7 +182,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
 
                     return (
                       <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="px-5 py-3.5 font-mono font-bold text-blue-600 dark:text-blue-400">
+                        <td className="px-5 py-3.5 font-mono font-bold text-[#c5834e]">
                           #{o.id}
                         </td>
                         <td className="px-5 py-3.5">
@@ -223,7 +223,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                                 <select
                                   value={o.status}
                                   onChange={(e) => onUpdateStatus(o.id, e.target.value)}
-                                  className="text-[11px] border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-600"
+                                  className="text-[11px] border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none focus:border-[#c5834e]"
                                 >
                                   <option value="في الانتظار">في الانتظار</option>
                                   <option value="في الطريق">في الطريق</option>
@@ -263,7 +263,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
               {filteredOrders.map((o) => (
                 <div key={o.id} className="pt-3 first:pt-0 space-y-2 text-right">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-xs text-blue-600 dark:text-blue-400">
+                    <span className="font-mono font-bold text-xs text-[#c5834e] dark:text-[#e0a36e]">
                       #{o.id}
                     </span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">

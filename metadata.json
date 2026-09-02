@@ -1,5 +1,5 @@
 {
-  "name": "RTG-SYSTEM - منظومة متكاملة لمتجرك الإلكتروني",
+  "name": "RTG-SESTEM - منظومة متكاملة لمتجرك الإلكتروني",
   "description": "منظومة متكاملة لإدارة مبيعات المتاجر، الكاشير، المخزن، الفواتير، والديون",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

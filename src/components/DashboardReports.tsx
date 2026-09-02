@@ -65,7 +65,7 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between text-right card-hover">
           <div className="flex items-center justify-between mb-2">
             <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">إجمالي المبيعات</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-lg bg-[#c5834e]/10 text-[#c5834e] dark:text-[#e0a36e] flex items-center justify-center text-xs">
               <i className="fa-solid fa-wallet"></i>
             </div>
           </div>
@@ -127,7 +127,7 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
       <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-right">
         <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 className="font-bold text-slate-800 dark:text-white uppercase text-xs sm:text-sm tracking-wide flex items-center gap-2">
-            <i className="fa-solid fa-layer-group text-blue-600"></i> توزيع الطلبيات حسب الحالة
+            <i className="fa-solid fa-layer-group text-[#c5834e]"></i> توزيع الطلبيات حسب الحالة
           </h3>
           <span className="text-xs text-slate-400 font-mono">إجمالي: {ordersCount} طلب</span>
         </div>
@@ -152,7 +152,7 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
       <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-right">
         <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 className="font-bold text-slate-800 dark:text-white uppercase text-xs sm:text-sm tracking-wide flex items-center gap-2">
-            <i className="fa-solid fa-chart-bar text-blue-600"></i> توزيع طرق الدفع
+            <i className="fa-solid fa-chart-bar text-[#c5834e]"></i> توزيع طرق الدفع
           </h3>
           <span className="text-xs text-slate-400 font-medium">النسب المئوية</span>
         </div>
@@ -174,7 +174,7 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
                   </div>
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
                     <div
-                      className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                      className="bg-[#c5834e] h-full rounded-full transition-all duration-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -189,7 +189,7 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
       <div className="bg-slate-900 text-white p-5 rounded-xl border border-slate-800 shadow-sm relative overflow-hidden text-right">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
-            <h4 className="text-xs sm:text-sm font-bold text-blue-400 flex items-center gap-2">
+            <h4 className="text-xs sm:text-sm font-bold text-[#e0a36e] flex items-center gap-2">
               <i className="fa-solid fa-calculator"></i> ملخص الأداء المالي الصافي
             </h4>
             <p className="text-xs text-slate-400 mt-0.5">
