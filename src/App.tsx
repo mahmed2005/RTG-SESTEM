@@ -17,6 +17,19 @@ import {
   loadMasterScriptUrl,
   saveMasterScriptUrl,
 } from "./data/initialStores";
+import {
+  syncStoreFromCloud,
+  cloudAddOrder,
+  cloudUpdateOrderStatus,
+  cloudRefundOrder,
+  cloudSaveProduct,
+  cloudDeleteProduct,
+  cloudRestockProduct,
+  cloudUpdateProductPrice,
+  cloudSaveDebt,
+  cloudSaveSubscriber,
+  cloudDeleteSubscriber,
+} from "./services/cloudService";
 import { RtgLogo } from "./components/RtgLogo";
 import { ToastContainer } from "./components/ToastContainer";
 import { SplashScreen } from "./components/SplashScreen";
@@ -63,14 +76,23 @@ export default function App() {
 
   const handleAddSubscriber = (sub: StoreSubscriber) => {
     setSubscribers((prev) => [sub, ...prev]);
+    if (masterScriptUrl) {
+      cloudSaveSubscriber(masterScriptUrl, sub).catch(() => {});
+    }
   };
 
   const handleUpdateSubscriber = (id: string, updated: StoreSubscriber) => {
     setSubscribers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    if (masterScriptUrl) {
+      cloudSaveSubscriber(masterScriptUrl, updated).catch(() => {});
+    }
   };
 
   const handleDeleteSubscriber = (id: string) => {
     setSubscribers((prev) => prev.filter((s) => s.id !== id));
+    if (masterScriptUrl) {
+      cloudDeleteSubscriber(masterScriptUrl, id).catch(() => {});
+    }
   };
 
   const handleChangeAdminPassword = (newPass: string) => {
@@ -84,16 +106,34 @@ export default function App() {
   };
 
   // Login as store from Admin Panel
-  const handleLoginAsStore = (sub: StoreSubscriber) => {
+  const handleLoginAsStore = async (sub: StoreSubscriber) => {
+    const finalUrl = sub.cloudUrl || masterScriptUrl;
     localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, sub.storeCode);
-    localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, sub.cloudUrl || masterScriptUrl);
+    localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, finalUrl);
     localStorage.setItem(STORAGE_KEYS.SHOP_NAME, sub.storeName);
 
-    setApiUrl(sub.cloudUrl || masterScriptUrl);
+    setApiUrl(finalUrl);
     setShopName(sub.storeName);
     setIsDemoMode(false);
     setScreen("app");
     showToast(`✓ تم الانتقال المباشر لمتجر "${sub.storeName}"`, "success");
+
+    // Auto sync store data if cloud URL available
+    if (finalUrl) {
+      setIsSyncing(true);
+      try {
+        const cloudData = await syncStoreFromCloud(finalUrl);
+        if (cloudData && cloudData.success) {
+          if (cloudData.products) setProducts(cloudData.products);
+          if (cloudData.orders) setOrders(cloudData.orders);
+          if (cloudData.debts) setDebts(cloudData.debts);
+        }
+      } catch {
+        // handled
+      } finally {
+        setIsSyncing(false);
+      }
+    }
   };
 
   // Shop & API credentials
@@ -108,41 +148,44 @@ export default function App() {
     return saved === "light" ? "light" : "dark";
   });
 
-  // Main Entities
+  // Main Entities - Clean initial state: no fake data loaded unless explicit demo mode!
   const [products, setProducts] = useState<ProductsMap>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
       } catch {
         // fallback
       }
     }
-    return INITIAL_PRODUCTS;
+    return {};
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ORDERS);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       } catch {
         // fallback
       }
     }
-    return INITIAL_ORDERS;
+    return [];
   });
 
   const [debts, setDebts] = useState<Debt[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.DEBTS);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       } catch {
         // fallback
       }
     }
-    return INITIAL_DEBTS;
+    return [];
   });
 
   // Toasts
@@ -251,43 +294,89 @@ export default function App() {
   };
 
   // Login Success
-  const handleLoginSuccess = (
+  const handleLoginSuccess = async (
     licenseKey: string,
     scriptUrl: string,
     verifiedShopName: string,
     _email: string,
     subscriber?: StoreSubscriber
   ) => {
-    localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, licenseKey);
-    localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, scriptUrl);
-    localStorage.setItem(STORAGE_KEYS.SHOP_NAME, verifiedShopName);
+    const finalApiUrl = subscriber?.cloudUrl || scriptUrl;
+    const finalShopName = subscriber?.storeName || verifiedShopName;
 
-    setApiUrl(subscriber?.cloudUrl || scriptUrl);
-    setShopName(subscriber?.storeName || verifiedShopName);
+    localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, licenseKey);
+    localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, finalApiUrl);
+    localStorage.setItem(STORAGE_KEYS.SHOP_NAME, finalShopName);
+
+    setApiUrl(finalApiUrl);
+    setShopName(finalShopName);
     setIsDemoMode(false);
     setIsLoginOpen(false);
     setScreen("app");
+    showToast(`✓ مرحباً بك في متجر "${finalShopName}"`, "success");
+
+    // Automatically sync live data from the store's Google Sheet
+    if (finalApiUrl) {
+      setIsSyncing(true);
+      showToast("جاري جلب بيانات المتجر من الخادم السحابي...", "info", 3500);
+      try {
+        const cloudData = await syncStoreFromCloud(finalApiUrl);
+        if (cloudData && cloudData.success) {
+          if (cloudData.products) setProducts(cloudData.products);
+          if (cloudData.orders) setOrders(cloudData.orders);
+          if (cloudData.debts) setDebts(cloudData.debts);
+          const pCount = cloudData.products ? Object.keys(cloudData.products).length : 0;
+          const oCount = cloudData.orders ? cloudData.orders.length : 0;
+          showToast(`✓ تم استلام بيانات متجرك بنجاح (${pCount} منتج، ${oCount} فاتورة)`, "success", 4000);
+        }
+      } catch (err) {
+        console.error("Auto sync on login error:", err);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
   };
 
   // Remote Sync
-  const handleSyncData = () => {
+  const handleSyncData = async () => {
     if (isDemoMode) {
-      showToast("أنت في الوضع التجريبي، البيانات محفوظة محلياً", "info");
+      showToast("أنت في الوضع التجريبي — البيانات محفوظة محلياً للتجربة", "info");
       return;
     }
 
     if (!apiUrl) {
-      showToast("تم تحديث البيانات المحلية بنجاح ✓", "success");
+      showToast("يرجى ربط رابط خادم المتجر لتفعيل المزامنة مع جوجل شيت", "info");
       return;
     }
 
     setIsSyncing(true);
-    showToast("جاري المزامنة مع السيرفر...", "info");
+    showToast("جاري المزامنة مع جدول جوجل شيت...", "info", 5000);
 
-    setTimeout(() => {
+    try {
+      const cloudData = await syncStoreFromCloud(apiUrl);
+      if (cloudData && cloudData.success) {
+        const pCount = cloudData.products ? Object.keys(cloudData.products).length : 0;
+        const oCount = cloudData.orders ? cloudData.orders.length : 0;
+        const dCount = cloudData.debts ? cloudData.debts.length : 0;
+
+        if (cloudData.products) setProducts(cloudData.products);
+        if (cloudData.orders) setOrders(cloudData.orders);
+        if (cloudData.debts) setDebts(cloudData.debts);
+
+        showToast(
+          `✓ اكتملت المزامنة بنجاح! (${pCount} منتج، ${oCount} فاتورة، ${dCount} دين)`,
+          "success",
+          4000
+        );
+      } else {
+        showToast("تعذر جلب البيانات، تأكد من صحة الرابط ونشره بصلاحية Anyone", "error", 5000);
+      }
+    } catch (e) {
+      console.error("Manual sync error:", e);
+      showToast("فشل الاتصال بالخادم السحابي", "error");
+    } finally {
       setIsSyncing(false);
-      showToast("✓ تم اكتمال المزامنة بنجاح", "success");
-    }, 1200);
+    }
   };
 
   // Logout
@@ -297,6 +386,11 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEYS.SHOP_NAME);
     setIsLogoutOpen(false);
     setIsDemoMode(false);
+    setApiUrl("");
+    setShopName("RTG-SESTEM");
+    setProducts({});
+    setOrders([]);
+    setDebts([]);
     setScreen("landing");
     showToast("تم تسجيل الخروج بنجاح", "info");
   };
@@ -306,34 +400,9 @@ export default function App() {
     setProducts(updatedProducts);
     setOrders((prev) => [newOrder, ...prev]);
 
-    // If live API is connected, send asynchronous payload
+    // Send real-time addition to Google Sheet
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "addOrder",
-            invoiceId: newOrder.id,
-            date: newOrder.date,
-            productsList: newOrder.desc,
-            totalSales: newOrder.total,
-            netProfit: newOrder.profit,
-            method: newOrder.method,
-            deliveryFee: newOrder.delivery,
-            discount: newOrder.discount || 0,
-            orderStatus: newOrder.status,
-            customerName: newOrder.cName,
-            customerPhone: newOrder.cPhone,
-            customerBackupPhone: newOrder.cBackup,
-            customerArea: newOrder.cArea,
-            cartItems: newOrder.cartItems,
-          }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudAddOrder(apiUrl, newOrder).catch(() => {});
     }
   };
 
@@ -344,16 +413,7 @@ export default function App() {
     showToast(`✓ تم تحديث حالة الفاتورة #${orderId} إلى (${nextStatus})`, "success");
 
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "updateStatus", invoiceId: orderId, status: nextStatus }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudUpdateOrderStatus(apiUrl, orderId, nextStatus).catch(() => {});
     }
   };
 
@@ -389,6 +449,10 @@ export default function App() {
           : o
       )
     );
+
+    if (apiUrl && !isDemoMode) {
+      cloudRefundOrder(apiUrl, invoiceId, returnNote).catch(() => {});
+    }
 
     setReturnInvoiceId(null);
     showToast(`✓ تم إرجاع الفاتورة #${invoiceId} واستعادة السلع للمخزن`, "success");
@@ -573,20 +637,12 @@ export default function App() {
     setDebts((prev) => [newDebt, ...prev]);
 
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "addOrUpdateDebt", ...newDebt }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudSaveDebt(apiUrl, newDebt).catch(() => {});
     }
   };
 
   const handleRecordDebtPayment = (debtId: string, amount: number) => {
+    let updatedDebt: Debt | null = null;
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id !== debtId) return d;
@@ -595,30 +651,43 @@ export default function App() {
         const newStatus =
           newRemaining === 0 ? "مغلق" : newPaid > 0 ? "مدفوع جزئياً" : "مفتوح";
 
-        return {
+        const updated: Debt = {
           ...d,
           paid: newPaid,
           remaining: newRemaining,
           status: newStatus,
           updatedAt: new Date().toLocaleString("ar-LY", { hour12: false }),
         };
+        updatedDebt = updated;
+        return updated;
       })
     );
+
+    if (apiUrl && !isDemoMode && updatedDebt) {
+      cloudSaveDebt(apiUrl, updatedDebt).catch(() => {});
+    }
   };
 
   const handleCloseDebt = (debtId: string) => {
+    let updatedDebt: Debt | null = null;
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id !== debtId) return d;
-        return {
+        const updated: Debt = {
           ...d,
           paid: d.original,
           remaining: 0,
           status: "مغلق",
           updatedAt: new Date().toLocaleString("ar-LY", { hour12: false }),
         };
+        updatedDebt = updated;
+        return updated;
       })
     );
+
+    if (apiUrl && !isDemoMode && updatedDebt) {
+      cloudSaveDebt(apiUrl, updatedDebt).catch(() => {});
+    }
   };
 
   // Current time state
@@ -667,6 +736,7 @@ export default function App() {
           onAddSubscriber={handleAddSubscriber}
           onUpdateSubscriber={handleUpdateSubscriber}
           onDeleteSubscriber={handleDeleteSubscriber}
+          onSyncSubscribers={(newSubs) => setSubscribers(newSubs)}
           onLoginAsStore={handleLoginAsStore}
           onClose={() => setScreen("landing")}
           adminPassword={adminPassword}
@@ -847,16 +917,16 @@ export default function App() {
                   <button
                     onClick={toggleTheme}
                     className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                    title="تبديل الوضع (نهاري / ليلي)"
+                    title={theme === "dark" ? "التبديل إلى الوضع النهاري (Light Mode)" : "التبديل إلى الوضع الليلي (Dark Mode)"}
                   >
-                    <i className={`fa-solid ${theme === "light" ? "fa-sun text-amber-500" : "fa-moon text-[#c5834e]"} text-xs`}></i>
+                    <i className={`fa-solid ${theme === "dark" ? "fa-sun text-amber-400" : "fa-moon text-indigo-500"} text-xs`}></i>
                   </button>
 
                   <button
                     onClick={handleSyncData}
                     disabled={isSyncing}
                     className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                    title="مزامنة البيانات"
+                    title="مزامنة البيانات مع جوجل شيت"
                   >
                     <i className={`fa-solid fa-rotate ${isSyncing ? "fa-spin text-[#c5834e]" : ""} text-xs`}></i>
                   </button>
@@ -875,73 +945,95 @@ export default function App() {
             {/* Mobile / Tablet Horizontal Navigation Bar */}
             <nav
               id="mainNav"
-              className="lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-2 py-1.5 sticky top-16 z-20 transition-colors duration-200"
+              className="lg:hidden bg-white/95 dark:bg-[#0d121f]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 py-2 sticky top-16 z-20 transition-colors duration-200 shadow-xs"
             >
-              <div className="wheel-container no-scrollbar max-w-full">
-                <div className="wheel-item">
-                  <button
-                    onClick={() => setActiveTab("pos")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      activeTab === "pos"
-                        ? "bg-[#c5834e] text-white shadow-sm font-black"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    <i className="fa-solid fa-cash-register text-xs"></i> كشير البيع
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth touch-pan-x py-0.5">
+                <button
+                  onClick={() => setActiveTab("pos")}
+                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === "pos"
+                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <i className="fa-solid fa-cash-register text-xs"></i>
+                  <span>كاشير البيع</span>
+                </button>
 
-                <div className="wheel-item">
-                  <button
-                    onClick={() => setActiveTab("orders")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                <button
+                  onClick={() => setActiveTab("orders")}
+                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === "orders"
+                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <i className="fa-solid fa-receipt text-xs"></i>
+                  <span>الفواتير</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
                       activeTab === "orders"
-                        ? "bg-[#c5834e] text-white shadow-sm font-black"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        ? "bg-white/20 text-white"
+                        : "bg-[#c5834e]/15 text-[#c5834e]"
                     }`}
                   >
-                    <i className="fa-solid fa-receipt text-xs"></i> الفواتير ({orders.length})
-                  </button>
-                </div>
+                    {orders.length}
+                  </span>
+                </button>
 
-                <div className="wheel-item">
-                  <button
-                    onClick={() => setActiveTab("inventory")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                <button
+                  onClick={() => setActiveTab("inventory")}
+                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === "inventory"
+                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <i className="fa-solid fa-boxes-stacked text-xs"></i>
+                  <span>المخزن</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
                       activeTab === "inventory"
-                        ? "bg-[#c5834e] text-white shadow-sm font-black"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
                     }`}
                   >
-                    <i className="fa-solid fa-boxes-stacked text-xs"></i> المخزن ({Object.keys(products).length})
-                  </button>
-                </div>
+                    {Object.keys(products).length}
+                  </span>
+                </button>
 
-                <div className="wheel-item">
-                  <button
-                    onClick={() => setActiveTab("dashboard")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      activeTab === "dashboard"
-                        ? "bg-[#c5834e] text-white shadow-sm font-black"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    <i className="fa-solid fa-chart-pie text-xs"></i> التقارير
-                  </button>
-                </div>
+                <button
+                  onClick={() => setActiveTab("dashboard")}
+                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === "dashboard"
+                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <i className="fa-solid fa-chart-pie text-xs"></i>
+                  <span>التقارير</span>
+                </button>
 
-                <div className="wheel-item">
-                  <button
-                    onClick={() => setActiveTab("debts")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                <button
+                  onClick={() => setActiveTab("debts")}
+                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === "debts"
+                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <i className="fa-solid fa-hand-holding-dollar text-xs"></i>
+                  <span>الديون</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
                       activeTab === "debts"
-                        ? "bg-[#c5834e] text-white shadow-sm font-black"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        ? "bg-white/20 text-white"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                     }`}
                   >
-                    <i className="fa-solid fa-hand-holding-dollar text-xs"></i> الديون ({debts.length})
-                  </button>
-                </div>
+                    {debts.length}
+                  </span>
+                </button>
               </div>
             </nav>
 

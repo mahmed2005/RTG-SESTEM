@@ -5,12 +5,14 @@ import {
   MASTER_SUBSCRIPTIONS_SCRIPT_CODE,
   STORE_ENGINE_SCRIPT_CODE,
 } from "../data/appsScriptTemplates";
+import { cloudGetSubscribers } from "../services/cloudService";
 
 interface AdminDashboardProps {
   subscribers: StoreSubscriber[];
   onAddSubscriber: (sub: StoreSubscriber) => void;
   onUpdateSubscriber: (id: string, sub: StoreSubscriber) => void;
   onDeleteSubscriber: (id: string) => void;
+  onSyncSubscribers?: (subs: StoreSubscriber[]) => void;
   onLoginAsStore: (sub: StoreSubscriber) => void;
   onClose: () => void;
   adminPassword: string;
@@ -25,6 +27,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddSubscriber,
   onUpdateSubscriber,
   onDeleteSubscriber,
+  onSyncSubscribers,
   onLoginAsStore,
   onClose,
   adminPassword,
@@ -285,6 +288,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast("✓ تم نسخ بيانات الدخول المنسقة للواتساب!", "success");
   };
 
+  // Cloud Sync state
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
+  // Sync Subscribers from Master Google Sheet
+  const handleSyncSubscribersFromCloud = async () => {
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (!url) {
+      showToast("يرجى إدخال وحفظ رابط الخادم المركزي أولاً من تبويب (الربط السحابي والأكواد)", "info");
+      return;
+    }
+
+    setIsSyncingCloud(true);
+    showToast("جاري جلب المشتركين من جدول جوجل شيت الرئيسي...", "info");
+
+    try {
+      const liveStores = await cloudGetSubscribers(url);
+      if (liveStores && Array.isArray(liveStores)) {
+        if (onSyncSubscribers) {
+          onSyncSubscribers(liveStores);
+        }
+        showToast(`✓ تم استلام وتحديث (${liveStores.length}) مشترك من جوجل شيت بنجاح!`, "success", 4000);
+      } else {
+        showToast("تعذر استلام البيانات، تأكد من صحة الرابط ونشره كـ Web App مع صلاحية Anyone", "error", 5000);
+      }
+    } catch (e) {
+      console.error("Cloud subscribers sync error:", e);
+      showToast("حدث خطأ أثناء الاتصال بالخادم المركزي", "error");
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   // Test Master Script Connection
   const handleTestMasterScript = () => {
     const url = masterUrlInput.trim();
@@ -309,9 +344,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setTestingMaster(false);
       setMasterStatus("failed");
       showToast("تعذر الاتصال بالخادم المركزي، تأكد من صحة الرابط والصلاحيات (Anyone)", "error");
-    }, 4500);
+    }, 5500);
 
-    (window as unknown as Record<string, (res: unknown) => void>)[callbackName] = () => {
+    (window as unknown as Record<string, (res: unknown) => void>)[callbackName] = (data: any) => {
       clearTimeout(timeout);
       if (document.getElementById(callbackName)) {
         document.getElementById(callbackName)?.remove();
@@ -320,6 +355,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setTestingMaster(false);
       setMasterStatus("success");
       onSaveMasterScriptUrl(url);
+
+      // Auto update subscribers list if returned
+      if (data && data.success && Array.isArray(data.stores) && onSyncSubscribers) {
+        onSyncSubscribers(data.stores);
+      }
+
       showToast("✓ الاتصال بالخادم المركزي نشط ومتصل 100%!", "success");
     };
 
@@ -380,6 +421,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Action Controls in Header */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={handleSyncSubscribersFromCloud}
+            disabled={isSyncingCloud}
+            className="px-3.5 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+            title="جلب وتحديث بيانات المشتركين مباشرة من جدول جوجل شيت الرئيسي"
+          >
+            <i className={`fa-solid fa-cloud-arrow-down ${isSyncingCloud ? "fa-spin text-[#c5834e]" : "text-blue-400"}`}></i>
+            <span className="hidden sm:inline">مزامنة سحابية</span>
+          </button>
+
           <button
             onClick={handleOpenAdd}
             className="px-3.5 py-2 text-xs font-bold bg-[#c5834e] hover:bg-[#a6632f] text-white rounded-xl flex items-center gap-1.5 shadow-md shadow-[#c5834e]/20 cursor-pointer transition-all active:scale-95"

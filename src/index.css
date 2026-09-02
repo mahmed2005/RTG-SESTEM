@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
+@variant dark (&:where(.dark, .dark *));
 
 :root {
   --brand-bronze: #c5834e;
@@ -17,41 +17,42 @@
 
 body {
   font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #0b0e17;
-  color: #f1f5f9;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Explicit Dark Mode Base */
-html.dark,
-html.dark body,
-body.dark {
+/* ===================================================================
+   DARK MODE ARCHITECTURE (100% Consistent Dark Theme)
+   =================================================================== */
+html.dark {
+  color-scheme: dark;
   background-color: #0b0e17 !important;
   color: #f1f5f9 !important;
 }
 
-/* Sidebar & Navigation Dark Mode */
-html.dark aside,
-body.dark aside,
-.dark aside,
-aside.sidebar-nav {
+html.dark body {
+  background-color: #0b0e17 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Sidebar & Desktop Navigation in Dark Mode */
+html.dark aside {
   background-color: #0d121f !important;
   border-color: #1e293b !important;
   color: #e2e8f0 !important;
 }
 
-html.dark header,
-body.dark header,
-.dark header {
+html.dark aside nav {
+  background-color: transparent !important;
+}
+
+html.dark header {
   background-color: #0f172a !important;
   border-color: #1e293b !important;
   color: #f8fafc !important;
 }
 
-html.dark #mainNav,
-body.dark #mainNav,
-.dark #mainNav {
+html.dark #mainNav {
   background-color: #0d121f !important;
   border-color: #1e293b !important;
 }
@@ -61,12 +62,32 @@ html.dark .sidebar-footer {
   border-color: #1e293b !important;
 }
 
-/* Sidebar & Navigation Light Mode */
+/* ===================================================================
+   LIGHT MODE ARCHITECTURE (100% Clean Light Theme)
+   =================================================================== */
+html.light {
+  color-scheme: light;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light body,
+body.light-mode {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Sidebar & Desktop Navigation in Light Mode */
 html.light aside,
 body.light-mode aside {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   color: #1e293b !important;
+}
+
+html.light aside nav,
+body.light-mode aside nav {
+  background-color: transparent !important;
 }
 
 html.light header,
@@ -211,15 +232,6 @@ body.light-mode .hover\:bg-slate-800:hover {
 html.light .hover\:bg-slate-700:hover,
 body.light-mode .hover\:bg-slate-700:hover {
   background-color: #e2e8f0 !important;
-}
-
-/* Header & Nav in Light Mode */
-html.light header,
-body.light-mode header,
-html.light nav,
-body.light-mode nav {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
 }
 
 /* Shadows in Light Mode */

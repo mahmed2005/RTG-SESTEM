@@ -177,17 +177,21 @@ export async function cloudUpdateOrderStatus(
 }
 
 /**
- * Refund Order: marks order as "مرتجع" and restores stock in Google Sheet
+ * Refund Order: marks order as "راجع" and restores stock in Google Sheet
  */
 export async function cloudRefundOrder(
   scriptUrl: string,
   invoiceId: string,
-  itemsToRestore?: { code: string; qty: number }[]
+  itemsToRestore?: { code: string; qty: number }[] | string,
+  returnNote?: string
 ): Promise<void> {
+  const items = Array.isArray(itemsToRestore) ? itemsToRestore : undefined;
+  const note = typeof itemsToRestore === "string" ? itemsToRestore : returnNote;
   await sendCloudAction(scriptUrl, {
     action: "refundOrder",
     invoiceId,
-    items: itemsToRestore,
+    items,
+    note,
   });
 }
 
