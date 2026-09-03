@@ -1,13 +1,16 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { RtgLogo } from "./RtgLogo";
 import { soundFx } from "../services/soundEffects";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
+import { SubscriptionPlan } from "../types";
+import { DEFAULT_SUBSCRIPTION_PLANS } from "../data/initialStores";
 
 interface LandingScreenProps {
   onOpenLogin: () => void;
   onEnterDemo: () => void;
   onOpenRegister: () => void;
   onOpenAdmin?: () => void;
+  subscriptionPlans?: SubscriptionPlan[];
 }
 
 export const LandingScreen: React.FC<LandingScreenProps> = ({
@@ -15,7 +18,14 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   onEnterDemo,
   onOpenRegister,
   onOpenAdmin,
+  subscriptionPlans = DEFAULT_SUBSCRIPTION_PLANS,
 }) => {
+  const [isPlansModalOpen, setIsPlansModalOpen] = useState(false);
+
+  // Active plans list to display
+  const activePlans = subscriptionPlans && subscriptionPlans.length > 0
+    ? subscriptionPlans
+    : DEFAULT_SUBSCRIPTION_PLANS;
   useEffect(() => {
     // Attempt to play welcome chime
     const triggerWelcome = () => {
@@ -197,26 +207,41 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-[#121725] border border-emerald-500/30 rounded-2xl p-3 text-center space-y-1">
               <div className="text-xl">⚡</div>
-              <p className="text-[11px] font-bold text-emerald-400">مجاني</p>
-              <p className="text-xs font-black text-white">0 د.ل</p>
-              <p className="text-[9px] text-slate-400">أول شهر</p>
+              <p className="text-[11px] font-bold text-emerald-400">1 شهر</p>
+              <p className="text-xs font-black text-white">45 د.ل</p>
+              <p className="text-[9px] text-slate-400">مرونة شهرية</p>
             </div>
             <div className="bg-[#121725] border border-[#c5834e]/60 rounded-2xl p-3 text-center space-y-1 relative shadow-lg shadow-[#c5834e]/10">
               <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-[#c5834e] text-white text-[8px] font-bold px-2 py-0.5 rounded-full shadow">
                 الأكثر طلباً
               </div>
               <div className="text-xl">🚀</div>
-              <p className="text-[11px] font-bold text-[#c5834e]">شهرين</p>
-              <p className="text-xs font-black text-white">75 د.ل</p>
-              <p className="text-[9px] text-slate-400">توفير 25 د.ل</p>
+              <p className="text-[11px] font-bold text-[#c5834e]">3 أشهر</p>
+              <p className="text-xs font-black text-white">115 د.ل</p>
+              <p className="text-[9px] text-slate-400">وفر 20 د.ل</p>
             </div>
             <div className="bg-[#121725] border border-amber-500/30 rounded-2xl p-3 text-center space-y-1">
               <div className="text-xl">💎</div>
               <p className="text-[11px] font-bold text-amber-400">سنوي</p>
-              <p className="text-xs font-black text-white">250 د.ل</p>
-              <p className="text-[9px] text-slate-400">الأوفر</p>
+              <p className="text-xs font-black text-white">350 د.ل</p>
+              <p className="text-[9px] text-slate-400">الأوفر قيمة</p>
             </div>
           </div>
+
+          {/* Button to show full subscription plans details */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              soundFx.playClick();
+              setIsPlansModalOpen(true);
+            }}
+            className="w-full py-2.5 px-3 bg-gradient-to-r from-[#172033] via-[#232f4b] to-[#172033] hover:from-[#1e2a44] hover:to-[#2d3d61] text-[#e0a36e] border border-[#c5834e]/40 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+          >
+            <i className="fa-solid fa-gem text-[#c5834e]"></i>
+            <span>عرض تفاصيل وباقات الاشتراكات الشهرية كاملة</span>
+            <i className="fa-solid fa-arrow-left text-[10px] text-slate-400"></i>
+          </motion.button>
         </motion.div>
 
         {/* About Section */}
@@ -316,6 +341,142 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           )}
         </div>
       </div>
+
+      {/* Subscription Plans Full Modal */}
+      <AnimatePresence>
+        {isPlansModalOpen && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2 }}
+              className="bg-[#0f1422] border border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+              dir="rtl"
+            >
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-[#131a2b]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#c5834e]/15 text-[#c5834e] flex items-center justify-center text-lg border border-[#c5834e]/30">
+                    <i className="fa-solid fa-gem"></i>
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-white">
+                      باقات وأسعار اشتراكات RTG-SYSTEM
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      اختر الباقة المناسبة لحجم ونشاط متجرك مع مزامنة سحابية مستمرة
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsPlansModalOpen(false)}
+                  className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              {/* Modal Body: Plans Grid */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {activePlans.map((plan) => (
+                    <div
+                      key={plan.id}
+                      className={`relative rounded-2xl p-4 border flex flex-col justify-between transition-all ${
+                        plan.badge && plan.badge.includes("الأكثر")
+                          ? "bg-gradient-to-b from-[#192237] to-[#121827] border-[#c5834e] shadow-lg shadow-[#c5834e]/10"
+                          : "bg-[#131929] border-slate-800/90 hover:border-slate-700"
+                      }`}
+                    >
+                      {plan.badge && (
+                        <div className="absolute -top-2.5 left-4 bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-md">
+                          {plan.badge}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between pt-1">
+                          <h4 className="text-sm font-black text-white">{plan.name}</h4>
+                          <span className="text-[11px] font-mono text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md">
+                            {plan.months} {plan.months === 1 ? "شهر" : plan.months === 2 ? "شهران" : "أشهر"}
+                          </span>
+                        </div>
+
+                        {/* Price Display */}
+                        <div className="flex items-baseline gap-2 pt-1 pb-2 border-b border-slate-800">
+                          <span className="text-2xl font-black text-white font-mono">{plan.price}</span>
+                          <span className="text-xs font-bold text-[#c5834e]">دينار ليبي (د.ل)</span>
+                          {plan.originalPrice && plan.originalPrice > plan.price && (
+                            <span className="text-xs text-slate-500 line-through font-mono mr-1">
+                              {plan.originalPrice} د.ل
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Features */}
+                        <ul className="space-y-2 py-2 text-xs text-slate-300">
+                          {plan.features.map((feat, fIdx) => (
+                            <li key={fIdx} className="flex items-start gap-2">
+                              <i className="fa-solid fa-check text-emerald-400 mt-0.5 shrink-0 text-[11px]"></i>
+                              <span>{feat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Subscribe CTA */}
+                      <button
+                        onClick={() => {
+                          setIsPlansModalOpen(false);
+                          handleAction(onOpenRegister);
+                        }}
+                        className="w-full mt-3 py-2.5 px-3 rounded-xl bg-[#1b253b] hover:bg-[#c5834e] text-slate-200 hover:text-white border border-[#c5834e]/30 hover:border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-bolt text-[#c5834e] group-hover:text-white"></i>
+                        <span>اشتراك في هذه الباقة</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Guarantee Banner */}
+                <div className="bg-[#121727] border border-slate-800 rounded-2xl p-3.5 flex items-center gap-3 text-right">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-base shrink-0">
+                    <i className="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <div className="text-xs text-slate-300 space-y-0.5">
+                    <p className="font-bold text-white">ضمان ودعم فني متواصل</p>
+                    <p className="text-[11px] text-slate-400">
+                      تشمل كافة الاشتراكات ربط ومزامنة قاعدة البيانات السحابية، ونسخ احتياطي يومي وحماية مشفرة.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-800 bg-[#121727] flex items-center justify-between">
+                <button
+                  onClick={() => setIsPlansModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إغلاق
+                </button>
+                <button
+                  onClick={() => {
+                    setIsPlansModalOpen(false);
+                    handleAction(onOpenRegister);
+                  }}
+                  className="px-5 py-2 rounded-xl btn-brand-bronze text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <i className="fa-solid fa-store"></i>
+                  <span>طلب تسجيل اشتراك جديد</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -82,6 +82,7 @@ export interface SubscriptionPlan {
   popular?: boolean;
   features: string[];
   description?: string;
+  isActive?: boolean;
 }
 
 export interface MasterSettings {
@@ -91,5 +92,7 @@ export interface MasterSettings {
   supportPhone: string;
   updatedAt?: string;
   subscriptionPlans?: SubscriptionPlan[];
+  systemCode?: string;
+  masterScriptUrl?: string;
 }
 

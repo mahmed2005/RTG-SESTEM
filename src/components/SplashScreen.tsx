@@ -49,7 +49,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       <RtgLogo size="splash" className="animate-float" />
 
       <h1 className="text-3xl sm:text-4xl font-black text-white mt-5 tracking-wider animate-fadeInUp">
-        RTG-SESTEM
+        RTG-SYSTEM
       </h1>
       <p className="text-sm text-[#c5834e] mt-1.5 font-bold animate-fadeInUp">
         منظومة متكاملة لمتجرك الإلكتروني

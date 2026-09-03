@@ -1,12 +1,10 @@
-import { StoreSubscriber } from "../types";
+import { StoreSubscriber, SubscriptionPlan } from "../types";
 
 export const DEFAULT_ADMIN_PASSWORD = "rtg@admin2025";
 export const MASTER_SCRIPT_STORAGE_KEY = "rtg_master_cloud_script_url";
 export const ADMIN_PASSWORD_STORAGE_KEY = "rtg_admin_master_password";
 export const SUBSCRIBERS_STORAGE_KEY = "rtg_subscribers_master_list";
 export const SUBSCRIPTION_PLANS_STORAGE_KEY = "rtg_subscription_plans_list";
-
-import { StoreSubscriber, SubscriptionPlan } from "../types";
 
 export const DEFAULT_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
@@ -154,6 +152,59 @@ export function saveSubscriptionPlans(plans: SubscriptionPlan[]): void {
   }
 }
 
+export const SYSTEM_CODE_STORAGE_KEY = "rtg_system_code";
+export const DEFAULT_SYSTEM_CODE = "RTG-SYSTEM-2025";
+export const MASTER_SETTINGS_STORAGE_KEY = "rtg_master_settings";
+
+export function getSystemCode(): string {
+  return localStorage.getItem(SYSTEM_CODE_STORAGE_KEY) || DEFAULT_SYSTEM_CODE;
+}
+
+export function setSystemCode(code: string): void {
+  localStorage.setItem(SYSTEM_CODE_STORAGE_KEY, code.trim());
+}
+
+export function loadMasterSettings(): {
+  masterScriptUrl: string;
+  adminPassword: string;
+  systemCode: string;
+  systemName: string;
+  supportPhone: string;
+  updatedAt?: string;
+} {
+  try {
+    const raw = localStorage.getItem(MASTER_SETTINGS_STORAGE_KEY);
+    if (raw) {
+      return {
+        masterScriptUrl: getMasterScriptUrl(),
+        adminPassword: getAdminPassword(),
+        systemCode: getSystemCode(),
+        systemName: "RTG-SYSTEM",
+        supportPhone: "0912345678",
+        ...JSON.parse(raw),
+      };
+    }
+  } catch {}
+  return {
+    masterScriptUrl: getMasterScriptUrl(),
+    adminPassword: getAdminPassword(),
+    systemCode: getSystemCode(),
+    systemName: "RTG-SYSTEM",
+    supportPhone: "0912345678",
+  };
+}
+
+export function saveMasterSettings(settings: Record<string, any>): void {
+  try {
+    if (settings.masterScriptUrl !== undefined) setMasterScriptUrl(settings.masterScriptUrl);
+    if (settings.adminPassword !== undefined) setAdminPassword(settings.adminPassword);
+    if (settings.systemCode !== undefined) setSystemCode(settings.systemCode);
+    localStorage.setItem(MASTER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error("Error saving master settings:", e);
+  }
+}
+
 // Aliases for convenience
 export const loadSubscribers = getSavedSubscribers;
 export const loadAdminPassword = getAdminPassword;
@@ -161,5 +212,8 @@ export const saveAdminPassword = setAdminPassword;
 export const loadMasterScriptUrl = getMasterScriptUrl;
 export const saveMasterScriptUrl = setMasterScriptUrl;
 export const loadSubscriptionPlans = getSubscriptionPlans;
+export const loadSystemCode = getSystemCode;
+export const saveSystemCode = setSystemCode;
+
 
 

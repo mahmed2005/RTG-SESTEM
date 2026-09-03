@@ -1,11 +1,25 @@
-import React, { useState, useMemo } from "react";
-import { StoreSubscriber } from "../types";
+import React, { useState, useMemo, useEffect } from "react";
+import { StoreSubscriber, SubscriptionPlan } from "../types";
 import { RtgLogo } from "./RtgLogo";
 import {
   MASTER_SUBSCRIPTIONS_SCRIPT_CODE,
   STORE_ENGINE_SCRIPT_CODE,
 } from "../data/appsScriptTemplates";
-import { cloudGetSubscribers, normalizeScriptUrl } from "../services/cloudService";
+import {
+  cloudGetSubscribers,
+  cloudGetMasterConfig,
+  cloudSaveMasterSettings,
+  cloudSaveSubscriptionPlans,
+  cloudTestMasterConnection,
+  normalizeScriptUrl,
+} from "../services/cloudService";
+import {
+  DEFAULT_SUBSCRIPTION_PLANS,
+  loadSubscriptionPlans,
+  saveSubscriptionPlans,
+  getSystemCode,
+  setSystemCode,
+} from "../data/initialStores";
 
 interface AdminDashboardProps {
   subscribers: StoreSubscriber[];
@@ -19,6 +33,10 @@ interface AdminDashboardProps {
   onChangeAdminPassword: (newPass: string) => void;
   masterScriptUrl: string;
   onSaveMasterScriptUrl: (url: string) => void;
+  subscriptionPlans?: SubscriptionPlan[];
+  onSaveSubscriptionPlans?: (plans: SubscriptionPlan[]) => void;
+  systemCode?: string;
+  onChangeSystemCode?: (code: string) => void;
   showToast: (msg: string, type?: "success" | "error" | "info") => void;
 }
 
@@ -34,10 +52,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onChangeAdminPassword,
   masterScriptUrl,
   onSaveMasterScriptUrl,
+  subscriptionPlans,
+  onSaveSubscriptionPlans,
+  systemCode,
+  onChangeSystemCode,
   showToast,
 }) => {
-  // Navigation tabs inside Admin Panel
-  const [activeAdminTab, setActiveAdminTab] = useState<"stores" | "cloud" | "settings">("stores");
+  // Navigation tabs inside Admin Panel: Stores, Plans, Settings, Cloud Scripts
+  const [activeAdminTab, setActiveAdminTab] = useState<"stores" | "plans" | "settings" | "cloud">("stores");
 
   // Search and filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -74,6 +96,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [currPassInput, setCurrPassInput] = useState("");
   const [newPassInput, setNewPassInput] = useState("");
   const [confirmPassInput, setConfirmPassInput] = useState("");
+
+  // Subscription plans state
+  const [plans, setPlans] = useState<SubscriptionPlan[]>(() => {
+    if (subscriptionPlans && subscriptionPlans.length > 0) return subscriptionPlans;
+    return loadSubscriptionPlans();
+  });
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [planNameInput, setPlanNameInput] = useState("");
+  const [planMonthsInput, setPlanMonthsInput] = useState<number>(1);
+  const [planPriceInput, setPlanPriceInput] = useState<number>(45);
+  const [planOriginalPriceInput, setPlanOriginalPriceInput] = useState<string>("");
+  const [planBadgeInput, setPlanBadgeInput] = useState("");
+  const [planFeaturesInput, setPlanFeaturesInput] = useState("");
+  const [isSavingPlansCloud, setIsSavingPlansCloud] = useState(false);
+
+  // System License Code State
+  const [sysCodeInput, setSysCodeInput] = useState(() => systemCode || getSystemCode());
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Sync plans if prop updates
+  useEffect(() => {
+    if (subscriptionPlans && subscriptionPlans.length > 0) {
+      setPlans(subscriptionPlans);
+    }
+  }, [subscriptionPlans]);
+
+  // Sync systemCode if prop updates
+  useEffect(() => {
+    if (systemCode) {
+      setSysCodeInput(systemCode);
+    }
+  }, [systemCode]);
 
   // Code Viewer state in Cloud Tab
   const [activeScriptView, setActiveScriptView] = useState<"master" | "store">("master");
@@ -336,8 +391,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Test Master Script Connection
-  const handleTestMasterScript = () => {
+  // Test Master Script Connection & Load Config
+  const handleTestMasterScript = async () => {
     const url = masterUrlInput.trim();
     if (!url) {
       showToast("يرجى إدخال رابط الخادم المركزي أولاً", "error");
@@ -346,51 +401,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     setTestingMaster(true);
     setMasterStatus(null);
-    showToast("جاري فحص الاتصال بالخادم المركزي...", "info");
+    showToast("جاري فحص الاتصال وقراءة بيانات المنظومة من جوجل شيت...", "info");
 
-    const callbackName = "onMasterPing_" + Date.now();
-    const script = document.createElement("script");
-    script.src = `${url}?action=getAllStores&callback=${callbackName}`;
-    script.id = callbackName;
+    try {
+      const testRes = await cloudTestMasterConnection(url);
+      if (testRes.success) {
+        setMasterStatus("success");
+        onSaveMasterScriptUrl(url);
 
-    const timeout = setTimeout(() => {
-      if (document.getElementById(callbackName)) {
-        document.getElementById(callbackName)?.remove();
+        // Fetch Master Config (settings & plans)
+        const config = await cloudGetMasterConfig(url);
+        if (config) {
+          if (config.plans && config.plans.length > 0) {
+            setPlans(config.plans);
+            if (onSaveSubscriptionPlans) onSaveSubscriptionPlans(config.plans);
+          }
+          if (config.settings) {
+            if (config.settings.systemCode) {
+              setSysCodeInput(config.settings.systemCode);
+              if (onChangeSystemCode) onChangeSystemCode(config.settings.systemCode);
+            }
+          }
+        }
+
+        // Auto fetch subscribers if returned or fetch directly
+        const liveStores = await cloudGetSubscribers(url);
+        if (liveStores && liveStores.length > 0 && onSyncSubscribers) {
+          onSyncSubscribers(liveStores);
+        }
+
+        // Push current settings to the sheet
+        cloudSaveMasterSettings(url, {
+          masterScriptUrl: url,
+          adminPassword,
+          systemCode: sysCodeInput.trim(),
+        }).catch(console.error);
+
+        showToast("✓ الاتصال نشط 100%! تم مزامنة المشتركين، الباقات، وإعدادات المنظومة مع جوجل شيت", "success");
+      } else {
+        setMasterStatus("failed");
+        showToast(testRes.message || "تعذر الاتصال بالخادم المركزي، تأكد من صحة الرابط والصلاحيات (Anyone)", "error");
       }
-      setTestingMaster(false);
+    } catch (err: any) {
       setMasterStatus("failed");
-      showToast("تعذر الاتصال بالخادم المركزي، تأكد من صحة الرابط والصلاحيات (Anyone)", "error");
-    }, 5500);
-
-    (window as unknown as Record<string, (res: unknown) => void>)[callbackName] = (data: any) => {
-      clearTimeout(timeout);
-      if (document.getElementById(callbackName)) {
-        document.getElementById(callbackName)?.remove();
-      }
-      delete (window as unknown as Record<string, unknown>)[callbackName];
+      showToast("حدث خطأ أثناء فحص الاتصال بالخادم المركزي", "error");
+    } finally {
       setTestingMaster(false);
-      setMasterStatus("success");
-      onSaveMasterScriptUrl(url);
-
-      // Auto update subscribers list if returned
-      if (data && data.success && Array.isArray(data.stores) && onSyncSubscribers) {
-        onSyncSubscribers(data.stores);
-      }
-
-      showToast("✓ الاتصال بالخادم المركزي نشط ومتصل 100%!", "success");
-    };
-
-    document.body.appendChild(script);
+    }
   };
 
   // Handle Save Master Script URL
   const handleSaveMasterUrl = () => {
-    onSaveMasterScriptUrl(masterUrlInput.trim());
+    const url = masterUrlInput.trim();
+    onSaveMasterScriptUrl(url);
+    if (url) {
+      cloudSaveMasterSettings(url, { masterScriptUrl: url }).catch(console.error);
+    }
     showToast("✓ تم حفظ رابط الخادم المركزي بنجاح", "success");
   };
 
   // Handle Admin Password Change
-  const handleChangePasswordSubmit = (e: React.FormEvent) => {
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (currPassInput !== adminPassword) {
       showToast("كلمة المرور الحالية غير صحيحة", "error");
@@ -405,11 +476,159 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
-    onChangeAdminPassword(newPassInput.trim());
+    const updatedPass = newPassInput.trim();
+    onChangeAdminPassword(updatedPass);
     setCurrPassInput("");
     setNewPassInput("");
     setConfirmPassInput("");
     showToast("✓ تم تحديث كلمة مرور الأدمن بنجاح!", "success");
+
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (url) {
+      try {
+        await cloudSaveMasterSettings(url, { adminPassword: updatedPass });
+        showToast("✓ تم حفظ كلمة المرور في قاعدة البيانات السحابية (جوجل شيت)", "info");
+      } catch {}
+    }
+  };
+
+  // Handle System License Code Change
+  const handleSaveSystemCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = sysCodeInput.trim();
+    if (!code) {
+      showToast("يرجى إدخال كود المنظومة", "error");
+      return;
+    }
+    setSystemCode(code);
+    if (onChangeSystemCode) onChangeSystemCode(code);
+    showToast("✓ تم حفظ كود المنظومة بنجاح", "success");
+
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (url) {
+      try {
+        await cloudSaveMasterSettings(url, { systemCode: code });
+        showToast("✓ تم مزامنة كود المنظومة في جوجل شيت", "info");
+      } catch {}
+    }
+  };
+
+  // Subscription Plans Management Handlers
+  const handleOpenAddPlan = () => {
+    setEditingPlan(null);
+    setPlanNameInput("");
+    setPlanMonthsInput(1);
+    setPlanPriceInput(45);
+    setPlanOriginalPriceInput("");
+    setPlanBadgeInput("");
+    setPlanFeaturesInput("كشير بيع سريع ومباشر\nإدارة المخزون والتنبيه بالنواقص\nمزامنة سحابية لحظية 24/7\nطباعة إيصالات احترافية");
+    setIsPlanModalOpen(true);
+  };
+
+  const handleOpenEditPlan = (p: SubscriptionPlan) => {
+    setEditingPlan(p);
+    setPlanNameInput(p.name);
+    setPlanMonthsInput(p.months);
+    setPlanPriceInput(p.price);
+    setPlanOriginalPriceInput(p.originalPrice ? String(p.originalPrice) : "");
+    setPlanBadgeInput(p.badge || "");
+    setPlanFeaturesInput(p.features.join("\n"));
+    setIsPlanModalOpen(true);
+  };
+
+  const handleSavePlanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!planNameInput.trim()) {
+      showToast("يرجى إدخال اسم باقة الاشتراك", "error");
+      return;
+    }
+
+    const featuresList = planFeaturesInput
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const updatedPlan: SubscriptionPlan = {
+      id: editingPlan ? editingPlan.id : "plan_" + Date.now(),
+      name: planNameInput.trim(),
+      months: Number(planMonthsInput) || 1,
+      price: Number(planPriceInput) || 0,
+      originalPrice: planOriginalPriceInput ? Number(planOriginalPriceInput) : undefined,
+      badge: planBadgeInput.trim() || undefined,
+      features: featuresList.length > 0 ? featuresList : ["كافة مميزات المنظومة"],
+      isActive: true,
+    };
+
+    let newPlans: SubscriptionPlan[];
+    if (editingPlan) {
+      newPlans = plans.map((p) => (p.id === editingPlan.id ? updatedPlan : p));
+      showToast("✓ تم تحديث بيانات الباقة بنجاح", "success");
+    } else {
+      newPlans = [...plans, updatedPlan];
+      showToast("✓ تم إضافة باقة الاشتراك بنجاح", "success");
+    }
+
+    setPlans(newPlans);
+    saveSubscriptionPlans(newPlans);
+    if (onSaveSubscriptionPlans) {
+      onSaveSubscriptionPlans(newPlans);
+    }
+    setIsPlanModalOpen(false);
+
+    // Auto sync to cloud sheet
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (url) {
+      setIsSavingPlansCloud(true);
+      try {
+        await cloudSaveSubscriptionPlans(url, newPlans);
+        showToast("✓ تم حفظ ومزامنة الباقات في جوجل شيت تلقائياً", "success");
+      } catch (err) {
+        console.error("Error saving plans to cloud:", err);
+      } finally {
+        setIsSavingPlansCloud(false);
+      }
+    }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذه الباقة؟")) return;
+    const newPlans = plans.filter((p) => p.id !== id);
+    setPlans(newPlans);
+    saveSubscriptionPlans(newPlans);
+    if (onSaveSubscriptionPlans) {
+      onSaveSubscriptionPlans(newPlans);
+    }
+    showToast("✓ تم حذف الباقة بنجاح", "info");
+
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (url) {
+      try {
+        await cloudSaveSubscriptionPlans(url, newPlans);
+      } catch {}
+    }
+  };
+
+  const handleSyncPlansToCloud = async () => {
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (!url) {
+      showToast("يرجى التأكد من إدخال رابط الخادم المركزي في تبويب الإعدادات", "error");
+      return;
+    }
+    setIsSavingPlansCloud(true);
+    showToast("جاري حفظ ومزامنة باقات الاشتراكات في جوجل شيت...", "info");
+    try {
+      const res = await cloudSaveSubscriptionPlans(url, plans);
+      if (res) {
+        showToast("✓ تم حفظ ومزامنة باقات الاشتراكات في جوجل شيت بنجاح!", "success");
+      } else {
+        showToast("تم إرسال التحديث، يرجى فحص ورقة (باقات وأسعار الاشتراكات)", "info");
+      }
+    } catch (err) {
+      console.error("Error syncing plans:", err);
+      showToast("حدث خطأ أثناء مزامنة الباقات في جوجل شيت", "error");
+    } finally {
+      setIsSavingPlansCloud(false);
+    }
   };
 
   return (
@@ -517,10 +736,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* ======================= NAVIGATION TABS ======================= */}
-      <div className="bg-[#0e1422] border-b border-slate-800 px-4 sm:px-6 flex gap-2 shrink-0">
+      <div className="bg-[#0e1422] border-b border-slate-800 px-4 sm:px-6 flex gap-2 shrink-0 overflow-x-auto">
         <button
           onClick={() => setActiveAdminTab("stores")}
-          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeAdminTab === "stores"
               ? "border-[#c5834e] text-white"
               : "border-transparent text-slate-400 hover:text-slate-200"
@@ -531,8 +750,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveAdminTab("plans")}
+          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeAdminTab === "plans"
+              ? "border-[#c5834e] text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <i className="fa-solid fa-gem text-[#c5834e]"></i>
+          <span>باقات وأسعار الاشتراكات ({plans.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab("settings")}
+          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeAdminTab === "settings"
+              ? "border-[#c5834e] text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <i className="fa-solid fa-sliders text-[#c5834e]"></i>
+          <span>إعدادات النظام وقاعدة البيانات</span>
+        </button>
+
+        <button
           onClick={() => setActiveAdminTab("cloud")}
-          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeAdminTab === "cloud"
               ? "border-[#c5834e] text-white"
               : "border-transparent text-slate-400 hover:text-slate-200"
@@ -540,18 +783,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <i className="fa-solid fa-cloud-arrow-up text-[#c5834e]"></i>
           <span>الربط السحابي ومحرك الأكواد</span>
-        </button>
-
-        <button
-          onClick={() => setActiveAdminTab("settings")}
-          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
-            activeAdminTab === "settings"
-              ? "border-[#c5834e] text-white"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <i className="fa-solid fa-gear text-[#c5834e]"></i>
-          <span>إعدادات النظام والأمان</span>
         </button>
       </div>
 
@@ -973,11 +1204,230 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: SETTINGS & MASTER SECURITY */}
+        {/* TAB 2: SUBSCRIPTION PLANS (باقات وأسعار الاشتراكات) */}
+        {activeAdminTab === "plans" && (
+          <div className="max-w-5xl mx-auto space-y-6">
+            {/* Header / Intro banner */}
+            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-8 h-8 rounded-lg bg-[#c5834e]/20 text-[#c5834e] flex items-center justify-center text-sm">
+                    <i className="fa-solid fa-gem"></i>
+                  </span>
+                  <h3 className="text-base font-bold text-white">إدارة باقات وأسعار الاشتراكات (Subscription Plans)</h3>
+                </div>
+                <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
+                  قم بتهيئة باقات المنظومة، تحديد الأسعار بالدينار الليبي، وإضافة المميزات لكل باقة. تظهر هذه الباقات للزبائن في الشاشة الرئيسية ويتم حفظها ومزامنتها في جدول جوجل شيت في ورقة <span className="font-bold text-[#c5834e]">"باقات وأسعار الاشتراكات"</span>.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={handleSyncPlansToCloud}
+                  disabled={isSavingPlansCloud}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                  title="مزامنة وحفظ الباقات في جوجل شيت"
+                >
+                  <i className={`fa-solid fa-cloud-arrow-up ${isSavingPlansCloud ? "fa-spin text-[#c5834e]" : ""}`}></i>
+                  <span>مزامنة مع جوجل شيت</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddPlan}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#c5834e]/20 transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-plus"></i>
+                  <span>إضافة باقة جديدة</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Plans Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {plans.map((p) => {
+                const isPopular = p.badge?.includes("شعبية") || p.badge?.includes("الأكثر") || p.badge?.includes("توفير");
+                return (
+                  <div
+                    key={p.id}
+                    className={`bg-[#121829] rounded-2xl p-5 border transition-all relative flex flex-col justify-between hover:border-[#c5834e]/60 ${
+                      isPopular ? "border-[#c5834e] shadow-xl shadow-[#c5834e]/10" : "border-slate-800"
+                    }`}
+                  >
+                    {p.badge && (
+                      <div className="absolute -top-3 left-4 bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">
+                        {p.badge}
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <h4 className="text-base font-bold text-white">{p.name}</h4>
+                        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
+                          {p.months === 1 ? "شهر واحد" : p.months === 12 ? "سنة كاملة" : `${p.months} أشهر`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline gap-2 mb-4 pb-3 border-b border-slate-800">
+                        <span className="text-2xl font-black text-[#c5834e] font-mono">{p.price}</span>
+                        <span className="text-xs text-slate-400 font-bold">د.ل</span>
+                        {p.originalPrice && p.originalPrice > p.price && (
+                          <span className="text-xs text-slate-500 line-through mr-1 font-mono">
+                            {p.originalPrice} د.ل
+                          </span>
+                        )}
+                      </div>
+
+                      <ul className="space-y-2 mb-6">
+                        {p.features.map((feat, idx) => (
+                          <li key={idx} className="text-xs text-slate-300 flex items-start gap-2">
+                            <i className="fa-solid fa-circle-check text-emerald-400 text-[11px] mt-0.5 shrink-0"></i>
+                            <span className="leading-snug">{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditPlan(p)}
+                        className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <i className="fa-solid fa-pen-to-square text-[#c5834e]"></i>
+                        <span>تعديل</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePlan(p.id)}
+                        className="py-2 px-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors border border-rose-500/20"
+                      >
+                        <i className="fa-solid fa-trash-can"></i>
+                        <span>حذف</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: SETTINGS & MASTER CONFIG */}
         {activeAdminTab === "settings" && (
-          <div className="max-w-xl mx-auto space-y-5">
-            {/* Change Admin Password */}
-            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 space-y-4">
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* 1. MASTER CLOUD SCRIPT & CONNECTION */}
+            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#c5834e]/20 text-[#c5834e] flex items-center justify-center text-sm">
+                    <i className="fa-solid fa-cloud"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">رابط الخادم السحابي المركزي (Master Cloud Web App URL)</h3>
+                    <p className="text-[11px] text-slate-400">
+                      رابط تطبيق جوجل شيت المنشور كـ Web App مع صلاحية (Anyone)
+                    </p>
+                  </div>
+                </div>
+
+                {masterStatus === "success" && (
+                  <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-[11px] font-bold flex items-center gap-1">
+                    <i className="fa-solid fa-circle-check"></i> متصل بنجاح
+                  </span>
+                )}
+                {masterStatus === "failed" && (
+                  <span className="px-2.5 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-full text-[11px] font-bold flex items-center gap-1">
+                    <i className="fa-solid fa-circle-xmark"></i> خطأ في الاتصال
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    رابط Google Apps Script المركزي
+                  </label>
+                  <input
+                    type="url"
+                    value={masterUrlInput}
+                    onChange={(e) => {
+                      setMasterUrlInput(e.target.value);
+                      setMasterStatus(null);
+                    }}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="w-full px-3.5 py-2.5 bg-[#090d16] border border-slate-700 rounded-xl text-xs font-mono text-emerald-400 outline-none focus:border-[#c5834e] transition-colors select-all"
+                    dir="ltr"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                    عند فحص الاتصال بنجاح، يتم حفظ هذا الرابط محلياً وسحابياً في ورقة العمل <span className="text-[#c5834e] font-bold">"الإعدادات وبيانات المنظومة"</span> وتثبيته في النظام.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestMasterScript}
+                    disabled={testingMaster}
+                    className="flex-1 sm:flex-initial px-5 py-2.5 bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <i className={`fa-solid fa-network-wired ${testingMaster ? "fa-spin" : ""}`}></i>
+                    <span>{testingMaster ? "جاري الفحص والمزامنة..." : "فحص الاتصال ومزامنة البيانات"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveMasterUrl}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-700 cursor-pointer transition-colors"
+                  >
+                    حفظ الرابط محلياً
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. SYSTEM LICENSE CODE */}
+            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+              <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center text-sm">
+                  <i className="fa-solid fa-fingerprint"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">كود ترخيص المنظومة الرئيسي (System License Code)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    كود التحقق والترخيص الموحد المخزن في شيت "الإعدادات وبيانات المنظومة"
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveSystemCode} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    كود المنظومة (System Code)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={sysCodeInput}
+                      onChange={(e) => setSysCodeInput(e.target.value)}
+                      placeholder="RTG-2025-MASTER"
+                      className="flex-1 px-3.5 py-2 bg-[#090d16] border border-slate-700 rounded-xl text-xs font-mono font-bold text-purple-300 outline-none focus:border-purple-400"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+                    >
+                      <i className="fa-solid fa-floppy-disk"></i>
+                      <span>حفظ ومزامنة الكود</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* 3. CHANGE ADMIN PASSWORD */}
+            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
               <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
                 <div className="w-8 h-8 rounded-lg bg-[#c5834e]/20 text-[#c5834e] flex items-center justify-center text-sm">
                   <i className="fa-solid fa-key"></i>
@@ -985,73 +1435,147 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <h3 className="text-sm font-bold text-white">تغيير كلمة مرور الإدارة (Master Admin Password)</h3>
                   <p className="text-[11px] text-slate-400">
-                    كلمة المرور المستخدمة للدخول عبر القفل السري في التذييل
+                    كلمة المرور المستخدمة للدخول للوحة الإدارة عبر القفل السري
                   </p>
                 </div>
               </div>
 
               <form onSubmit={handleChangePasswordSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                    كلمة المرور الحالية *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={currPassInput}
-                    onChange={(e) => setCurrPassInput(e.target.value)}
-                    placeholder="أدخل كلمة المرور الحالية"
-                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
-                  />
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      كلمة المرور الحالية *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={currPassInput}
+                      onChange={(e) => setCurrPassInput(e.target.value)}
+                      placeholder="كلمة المرور الحالية"
+                      className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                    كلمة المرور الجديدة *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={newPassInput}
-                    onChange={(e) => setNewPassInput(e.target.value)}
-                    placeholder="كلمة مرور جديدة قوية"
-                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      كلمة المرور الجديدة *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={newPassInput}
+                      onChange={(e) => setNewPassInput(e.target.value)}
+                      placeholder="كلمة مرور جديدة قوية"
+                      className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                    تأكيد كلمة المرور الجديدة *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassInput}
-                    onChange={(e) => setConfirmPassInput(e.target.value)}
-                    placeholder="أعد كتابة كلمة المرور الجديدة"
-                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
-                  />
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      تأكيد كلمة المرور *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassInput}
+                      onChange={(e) => setConfirmPassInput(e.target.value)}
+                      placeholder="تأكيد الجديدة"
+                      className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
+                    />
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-95"
+                  className="w-full sm:w-auto px-5 bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-95"
                 >
-                  <i className="fa-solid fa-lock"></i> حفظ وتحديث كلمة المرور
+                  <i className="fa-solid fa-lock"></i>
+                  <span>حفظ وتحديث كلمة المرور في المنظومة وجوجل شيت</span>
                 </button>
               </form>
             </div>
 
-            {/* Quick System Info */}
-            <div className="bg-[#121829] p-4 rounded-2xl border border-slate-800 text-xs space-y-2 text-slate-300">
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <i className="fa-solid fa-shield text-[#c5834e]"></i> معلومات أمان منظومة RTG-SESTEM
+            {/* 4. GOOGLE SHEETS 3-SHEETS ARCHITECTURE VISUALIZER */}
+            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 space-y-3 text-xs text-slate-300 shadow-xl">
+              <div className="font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-2">
+                <i className="fa-solid fa-table-cells text-emerald-400"></i>
+                <span>هيكلية قاعدة البيانات السحابية في جدول Google Sheets (3 ورقات عمل رئيسية)</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                يتم تشفير وحفظ بيانات التراخيص والمشتركين في الخوادم السحابية المشفرة مع دعم العمل حتى في حال انقطاع الإنترنت (Offline-First).
+                يقوم سكريبت الخادم المركزي بإنشاء وإدارة 3 ورقات عمل مستقلة في ملف جوجل شيت الخاص بك تلقائياً:
               </p>
-              <div className="text-[10px] text-slate-500 pt-2 border-t border-slate-800">
-                رقم هاتف الدعم الفني للإدارة: <span className="font-mono text-emerald-400 font-bold">0934590635</span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="bg-[#090d16] p-3 rounded-xl border border-slate-800 space-y-1">
+                  <div className="font-bold text-blue-400 flex items-center gap-1.5">
+                    <i className="fa-solid fa-users text-xs"></i>
+                    <span>1. ورقة "المشتركون"</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    تحتوي على بيانات المتاجر، المعرف ID، الكود، اسم المستخدم، كلمة المرور، الهاتف، الباقة، وتواريخ الصلاحية.
+                  </p>
+                </div>
+
+                <div className="bg-[#090d16] p-3 rounded-xl border border-slate-800 space-y-1">
+                  <div className="font-bold text-purple-400 flex items-center gap-1.5">
+                    <i className="fa-solid fa-sliders text-xs"></i>
+                    <span>2. ورقة "الإعدادات وبيانات المنظومة"</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    تحفظ كود المنظومة (System Code)، كلمة مرور الإدارة المركزية، ورابط الخادم السحابي المركزي دائماً.
+                  </p>
+                </div>
+
+                <div className="bg-[#090d16] p-3 rounded-xl border border-slate-800 space-y-1">
+                  <div className="font-bold text-[#c5834e] flex items-center gap-1.5">
+                    <i className="fa-solid fa-gem text-xs"></i>
+                    <span>3. ورقة "باقات وأسعار الاشتراكات"</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    تحفظ باقات وأسعار المنظومة بالدينار الليبي، عدد الأشهر، الشارات المميزة، والمميزات التابعة لكل باقة.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. GITHUB PAGES WHITE SCREEN RESOLUTION GUIDE */}
+            <div className="bg-gradient-to-br from-emerald-950/40 to-slate-900 p-5 rounded-2xl border border-emerald-500/40 space-y-3.5 shadow-xl text-xs text-slate-200">
+              <div className="flex items-center gap-2 border-b border-emerald-500/30 pb-2">
+                <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm font-bold">
+                  <i className="fa-brands fa-github"></i>
+                </span>
+                <div>
+                  <h4 className="font-bold text-white text-sm">حل مشكلة الشاشة البيضاء في GitHub Pages (تم الإصلاح 100%)</h4>
+                  <span className="text-[11px] text-emerald-300">تم تضمين ملف 404.html وتجهيز GitHub Actions Workflow للنشر التلقائي</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-[11px] leading-relaxed text-slate-300">
+                <p>
+                  لضمان تشغيل الموقع وظهوره مباشرة بدون شاشة بيضاء على استضافة GitHub Pages، اتبع هذه الخطوة البسيطة لمرة واحدة:
+                </p>
+                <div className="bg-[#090d16]/90 p-3 rounded-xl border border-slate-800 space-y-1.5 font-sans">
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-emerald-400">1.</span>
+                    <span>افتح مستودعك على GitHub ثم اضغط على تبويب <strong>Settings (الإعدادات)</strong> في الأعلى.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-emerald-400">2.</span>
+                    <span>من القائمة الجانبية اليسرى، اضغط على <strong>Pages</strong>.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-emerald-400">3.</span>
+                    <span>تحت عنوان <strong>Build and deployment</strong>، غيّر خيار <strong>Source</strong> من <em>"Deploy from a branch"</em> إلى:</span>
+                  </div>
+                  <div className="mr-5 p-2 bg-emerald-900/30 border border-emerald-500/40 rounded-lg text-emerald-300 font-bold flex items-center gap-2">
+                    <i className="fa-solid fa-bolt"></i>
+                    <span>اختر: GitHub Actions</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-emerald-400">4.</span>
+                    <span>بمجرد اختيار GitHub Actions، سيعمل ملف النشر الآلي <code className="text-[#c5834e] font-mono">.github/workflows/deploy.yml</code> ويصبح موقعك يعمل مباشرة وفوراً!</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1460,6 +1984,142 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingStore(null)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs border border-slate-700 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: ADD / EDIT SUBSCRIPTION PLAN ======================= */}
+      {isPlanModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fadeInUp">
+          <div className="bg-[#121829] rounded-2xl border border-slate-800 p-5 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#c5834e]/20 text-[#c5834e] flex items-center justify-center">
+                  <i className="fa-solid fa-gem"></i>
+                </div>
+                <h3 className="text-sm font-bold text-white">
+                  {editingPlan ? "تعديل باقة اشتراك" : "إضافة باقة اشتراك جديدة"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPlanModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer p-1"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlanSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  اسم الباقة *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={planNameInput}
+                  onChange={(e) => setPlanNameInput(e.target.value)}
+                  placeholder="مثال: الباقة الشهرية، الباقة السنوية، باقة VIP"
+                  className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    مدة الباقة (بالأشهر) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    required
+                    value={planMonthsInput}
+                    onChange={(e) => setPlanMonthsInput(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs font-mono text-white outline-none focus:border-[#c5834e]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    السعر الحالي (د.ل) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    required
+                    value={planPriceInput}
+                    onChange={(e) => setPlanPriceInput(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs font-mono text-emerald-400 font-bold outline-none focus:border-[#c5834e]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    السعر قبل الخصم (اختياري)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={planOriginalPriceInput}
+                    onChange={(e) => setPlanOriginalPriceInput(e.target.value)}
+                    placeholder="مثال: 60"
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs font-mono text-slate-400 outline-none focus:border-[#c5834e]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    شارة مميزة (Badge)
+                  </label>
+                  <input
+                    type="text"
+                    value={planBadgeInput}
+                    onChange={(e) => setPlanBadgeInput(e.target.value)}
+                    placeholder="مثال: الأكثر طلباً، خصم 20%"
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  مميزات الباقة (اكتب كل ميزة في سطر منفصل)
+                </label>
+                <textarea
+                  rows={4}
+                  value={planFeaturesInput}
+                  onChange={(e) => setPlanFeaturesInput(e.target.value)}
+                  placeholder="كشير بيع سريع ومباشر&#10;إدارة المخزون والتنبيه بالنواقص&#10;مزامنة سحابية لحظية 24/7"
+                  className="w-full px-3 py-2 bg-[#090d16] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-[#c5834e] leading-relaxed resize-none"
+                ></textarea>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  كل سطر سيمثل نقطة ميزة بعلامة صح أمام المشترك في الشاشة الرئيسية.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-floppy-disk"></i>
+                  <span>حفظ الباقة والمزامنة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPlanModalOpen(false)}
                   className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs border border-slate-700 cursor-pointer"
                 >
                   إلغاء

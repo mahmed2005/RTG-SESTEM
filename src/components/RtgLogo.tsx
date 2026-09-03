@@ -34,6 +34,12 @@ export const RtgLogo: React.FC<RtgLogoProps> = ({
       >
         <img
           src={officialLogoImg}
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (!target.src.endsWith("logo.jpg")) {
+              target.src = "./logo.jpg";
+            }
+          }}
           alt="RTG-SYSTEM Official Logo"
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover select-none pointer-events-none"

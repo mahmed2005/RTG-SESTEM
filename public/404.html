@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RTG-SYSTEM — جاري التحميل...</title>
+    <script>
+      // Single Page Application redirect for GitHub Pages
+      sessionStorage.redirect = location.href;
+      var pathSegments = location.pathname.split('/');
+      // If deployed in a subfolder like /RTG-SESTEM/
+      var repoName = pathSegments[1] ? '/' + pathSegments[1] + '/' : '/';
+      location.replace(repoName);
+    </script>
+  </head>
+  <body style="background-color: #0b0e17; color: #f8fafc; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <div style="text-align: center;">
+      <h2 style="color: #c5834e;">منظومة RTG-SYSTEM</h2>
+      <p style="color: #94a3b8;">جاري توجيهك إلى التطبيق...</p>
+    </div>
+  </body>
+</html>

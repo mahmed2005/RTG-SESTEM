@@ -7,6 +7,7 @@ import {
   ToastMessage,
   ActiveTab,
   StoreSubscriber,
+  SubscriptionPlan,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_DEBTS } from "./data/initialData";
 import {
@@ -16,6 +17,10 @@ import {
   saveAdminPassword,
   loadMasterScriptUrl,
   saveMasterScriptUrl,
+  loadSubscriptionPlans,
+  saveSubscriptionPlans,
+  getSystemCode,
+  setSystemCode,
 } from "./data/initialStores";
 import {
   syncStoreFromCloud,
@@ -73,6 +78,8 @@ export default function App() {
   const [subscribers, setSubscribers] = useState<StoreSubscriber[]>(() => loadSubscribers());
   const [adminPassword, setAdminPassword] = useState<string>(() => loadAdminPassword());
   const [masterScriptUrl, setMasterScriptUrl] = useState<string>(() => loadMasterScriptUrl());
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>(() => loadSubscriptionPlans());
+  const [systemCode, setSystemCodeState] = useState<string>(() => getSystemCode());
 
   useEffect(() => {
     saveSubscribers(subscribers);
@@ -878,6 +885,7 @@ export default function App() {
           onEnterDemo={handleEnterDemo}
           onOpenRegister={() => setIsRegisterOpen(true)}
           onOpenAdmin={() => setIsAdminLoginOpen(true)}
+          subscriptionPlans={subscriptionPlans}
         />
       )}
 
@@ -895,6 +903,16 @@ export default function App() {
           onChangeAdminPassword={handleChangeAdminPassword}
           masterScriptUrl={masterScriptUrl}
           onSaveMasterScriptUrl={handleSaveMasterScriptUrl}
+          subscriptionPlans={subscriptionPlans}
+          onSaveSubscriptionPlans={(newPlans) => {
+            setSubscriptionPlans(newPlans);
+            saveSubscriptionPlans(newPlans);
+          }}
+          systemCode={systemCode}
+          onChangeSystemCode={(code) => {
+            setSystemCodeState(code);
+            setSystemCode(code);
+          }}
           showToast={showToast}
         />
       )}

@@ -3,7 +3,7 @@
  * Handles two-way real-time communication between RTG-SESTEM and Google Apps Script Web Apps
  */
 
-import { Debt, Order, Product, ProductsMap, StoreSubscriber } from "../types";
+import { Debt, Order, Product, ProductsMap, StoreSubscriber, SubscriptionPlan, MasterSettings } from "../types";
 
 /**
  * Sanitize and normalize Google Apps Script Web App URLs
@@ -357,3 +357,129 @@ export async function cloudDeleteSubscriber(
     username,
   });
 }
+
+export interface MasterConfigResult {
+  success: boolean;
+  status?: string;
+  settings?: MasterSettings;
+  plans?: SubscriptionPlan[];
+  system?: string;
+  message?: string;
+}
+
+/**
+ * Fetch Settings & Subscription Plans from Master Central Cloud
+ */
+export async function cloudGetMasterConfig(
+  masterScriptUrl: string
+): Promise<MasterConfigResult | null> {
+  const res = await fetchCloudData<MasterConfigResult>(masterScriptUrl, "getMasterConfig");
+  if (res && res.success) {
+    return res;
+  }
+  return null;
+}
+
+/**
+ * Save Master Settings (Script URL, admin password, system code) to Master Central Cloud
+ */
+export async function cloudSaveMasterSettings(
+  masterScriptUrl: string,
+  settings: Record<string, any>
+): Promise<boolean> {
+  // 1. Try POST
+  const ok = await sendCloudAction(masterScriptUrl, {
+    action: "saveSettings",
+    settings,
+    ...settings,
+  });
+
+  // 2. Also try GET fallback to guarantee saving even across restricted networks
+  try {
+    const { url: cleanUrl } = normalizeScriptUrl(masterScriptUrl);
+    if (cleanUrl) {
+      const u = new URL(cleanUrl);
+      u.searchParams.set("action", "updateSettings");
+      Object.entries(settings).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          u.searchParams.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+        }
+      });
+      u.searchParams.set("_t", Date.now().toString());
+      fetch(u.toString(), { mode: "no-cors" }).catch(() => {});
+    }
+  } catch {}
+
+  return ok;
+}
+
+/**
+ * Save Subscription Plans array to Master Central Cloud
+ */
+export async function cloudSaveSubscriptionPlans(
+  masterScriptUrl: string,
+  plans: SubscriptionPlan[]
+): Promise<boolean> {
+  return await sendCloudAction(masterScriptUrl, {
+    action: "savePlans",
+    plans,
+  });
+}
+
+/**
+ * Test Master Server connection and fetch current setup
+ */
+export async function cloudTestMasterConnection(
+  url: string
+): Promise<{
+  success: boolean;
+  message: string;
+  config?: MasterConfigResult | null;
+  stores?: StoreSubscriber[] | null;
+}> {
+  const { url: cleanUrl, warning } = normalizeScriptUrl(url);
+  if (!cleanUrl) {
+    return { success: false, message: "يرجى إدخال رابط الخادم السحابي أولاً" };
+  }
+  if (warning) {
+    return { success: false, message: warning };
+  }
+
+  try {
+    // Check config first
+    const config = await cloudGetMasterConfig(cleanUrl);
+    const stores = await cloudGetSubscribers(cleanUrl);
+
+    if (config || stores) {
+      const storesCount = stores ? stores.length : 0;
+      return {
+        success: true,
+        message: `تم الاتصال بنجاح بالخادم المركزي ✓ (المشتركون: ${storesCount})`,
+        config,
+        stores,
+      };
+    }
+
+    // Ping check fallback
+    const ping = await fetchCloudData<{ status?: string; system?: string }>(cleanUrl, "ping");
+    if (ping && (ping.status === "online" || ping.system)) {
+      return {
+        success: true,
+        message: "تم الاتصال بنجاح بالخادم السحابي ✓",
+        config: null,
+        stores: null,
+      };
+    }
+
+    return {
+      success: false,
+      message: "لم يتمكن النظام من استلام استجابة من الخادم السحابي. يرجى التحقق من نشر السكربت (Execute as Me, Who has access: Anyone).",
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      message: `خطأ في الاتصال: ${e?.message || "تعذر الوصول إلى الخادم"}`,
+    };
+  }
+}
+
