@@ -107,6 +107,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [planToDelete, setPlanToDelete] = useState<SubscriptionPlan | null>(null);
   const [planNameInput, setPlanNameInput] = useState("");
   const [planMonthsInput, setPlanMonthsInput] = useState<number>(1);
   const [planPriceInput, setPlanPriceInput] = useState<number>(45);
@@ -593,15 +594,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleDeletePlan = async (id: string) => {
-    if (!confirm("هل أنت متأكد من حذف هذه الباقة؟")) return;
+  const handleDeletePlan = (plan: SubscriptionPlan) => {
+    setPlanToDelete(plan);
+  };
+
+  const executeDeletePlan = async (plan: SubscriptionPlan) => {
+    const id = plan.id;
     const newPlans = plans.filter((p) => p.id !== id);
     setPlans(newPlans);
     saveSubscriptionPlans(newPlans);
     if (onSaveSubscriptionPlans) {
       onSaveSubscriptionPlans(newPlans);
     }
-    showToast("✓ تم حذف الباقة بنجاح", "info");
+    showToast(`✓ تم حذف باقة "${plan.name}" بنجاح`, "info");
+    setPlanToDelete(null);
 
     const url = masterUrlInput.trim() || masterScriptUrl.trim();
     if (url) {
@@ -1303,7 +1309,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeletePlan(p.id)}
+                        onClick={() => handleDeletePlan(p)}
                         className="py-2 px-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors border border-rose-500/20"
                       >
                         <i className="fa-solid fa-trash-can"></i>
@@ -2133,7 +2139,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* ======================= MODAL: DELETE CONFIRM ======================= */}
+      {/* ======================= MODAL: DELETE CONFIRM SUBSCRIBER ======================= */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fadeInUp">
           <div className="bg-[#121829] rounded-2xl border border-rose-500/30 p-5 w-full max-w-sm text-center space-y-4 shadow-2xl">
@@ -2159,6 +2165,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 onClick={() => setDeleteConfirmId(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-xl text-xs border border-slate-700 cursor-pointer"
+              >
+                تراجع
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: DELETE CONFIRM PLAN ======================= */}
+      {planToDelete && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fadeInUp">
+          <div className="bg-[#181c22] rounded-2xl border border-rose-500/40 p-5 w-full max-w-sm text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto text-xl">
+              <i className="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 className="text-sm font-bold text-white">تأكيد حذف باقة الاشتراك؟</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              هل أنت متأكد من رغبتك في حذف باقة <span className="font-bold text-[#c57b42]">"{planToDelete.name}"</span>؟
+              <br />
+              <span className="text-[11px] text-slate-400 mt-1 inline-block">سيتم حذفها فوراً من الباقات والشاشة الرئيسية وتحديث السحابة.</span>
+            </p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => executeDeletePlan(planToDelete)}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 rounded-xl text-xs cursor-pointer shadow-md transition-all active:scale-95"
+              >
+                نعم، احذف الباقة
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanToDelete(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs border border-slate-700 cursor-pointer transition-colors"
               >
                 تراجع
               </button>
