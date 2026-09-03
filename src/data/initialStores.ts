@@ -1,6 +1,7 @@
 import { StoreSubscriber, SubscriptionPlan } from "../types";
 
 export const DEFAULT_ADMIN_PASSWORD = "rtg@admin2025";
+export const DEFAULT_MASTER_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxST8gCnxrB9XL0fTMSa5bWu1iAoBbcAtpRZSr3mm83ARgVPMaiF4J4db9biR52DLS8/exec";
 export const MASTER_SCRIPT_STORAGE_KEY = "rtg_master_cloud_script_url";
 export const ADMIN_PASSWORD_STORAGE_KEY = "rtg_admin_master_password";
 export const SUBSCRIBERS_STORAGE_KEY = "rtg_subscribers_master_list";
@@ -87,7 +88,38 @@ export const DEMO_SUBSCRIBERS: StoreSubscriber[] = [
   }
 ];
 
-export const INITIAL_SUBSCRIBERS: StoreSubscriber[] = [];
+export const INITIAL_SUBSCRIBERS: StoreSubscriber[] = [
+  {
+    id: "STORE-2",
+    storeCode: "RTG-8631",
+    username: "MAHMED",
+    password: "20052005",
+    storeName: "RTG-SESTEM",
+    phone: "934590635",
+    cloudUrl: "https://script.google.com/macros/s/AKfycbzU7Hz1tVMeNrmaO9fUVQBFuPGv2-UlaHBiDzX6cFr3RT5P8eSbFEEz7I6-8fXg_zJZ/exec",
+    startDate: "2026-09-03",
+    endDate: "2026-10-03",
+    plan: "شهري",
+    status: "نشط",
+    notes: "المتجر الأساسي للمنظومة",
+    createdAt: "2026-09-03",
+  },
+  {
+    id: "STORE-1",
+    storeCode: "RTG-1001",
+    username: "store1",
+    password: "123456",
+    storeName: "متجر النخبة للتجارة",
+    phone: "912345678",
+    cloudUrl: "https://script.google.com/macros/s/AKfycbw0bEMjT9cPyeq7iemJB_tMX9LlFIOtBlF3jEee3hoOJVt0pDaBAbnwSrgVxmDgFEOYmw/exec",
+    startDate: "2025-01-01",
+    endDate: "2026-10-02",
+    plan: "سنوي",
+    status: "نشط",
+    notes: "متجر رئيسي",
+    createdAt: "2025-01-01",
+  }
+];
 
 // Helper functions for storage
 export function getSavedSubscribers(): StoreSubscriber[] {
@@ -95,14 +127,14 @@ export function getSavedSubscribers(): StoreSubscriber[] {
     const raw = localStorage.getItem(SUBSCRIBERS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
   } catch (e) {
     console.error("Error reading subscribers:", e);
   }
-  return [];
+  return INITIAL_SUBSCRIBERS;
 }
 
 export function saveSubscribers(subscribers: StoreSubscriber[]): void {
@@ -122,11 +154,13 @@ export function setAdminPassword(newPass: string): void {
 }
 
 export function getMasterScriptUrl(): string {
-  return localStorage.getItem(MASTER_SCRIPT_STORAGE_KEY) || "";
+  const saved = localStorage.getItem(MASTER_SCRIPT_STORAGE_KEY);
+  if (saved && saved.trim()) return saved.trim();
+  return DEFAULT_MASTER_SCRIPT_URL;
 }
 
 export function setMasterScriptUrl(url: string): void {
-  localStorage.setItem(MASTER_SCRIPT_STORAGE_KEY, url.trim());
+  localStorage.setItem(MASTER_SCRIPT_STORAGE_KEY, url.trim() || DEFAULT_MASTER_SCRIPT_URL);
 }
 
 export function getSubscriptionPlans(): SubscriptionPlan[] {

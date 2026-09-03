@@ -36,6 +36,8 @@ import {
   cloudSaveSubscriber,
   cloudDeleteSubscriber,
   normalizeScriptUrl,
+  cloudGetSubscribers,
+  cloudGetMasterConfig,
 } from "./services/cloudService";
 import { soundFx } from "./services/soundEffects";
 import { motion, AnimatePresence } from "motion/react";
@@ -84,6 +86,34 @@ export default function App() {
   useEffect(() => {
     saveSubscribers(subscribers);
   }, [subscribers]);
+
+  // Synchronize with Master Central Cloud on startup for all devices & new phones
+  useEffect(() => {
+    const url = masterScriptUrl ? masterScriptUrl.trim() : "";
+    if (url) {
+      cloudGetSubscribers(url)
+        .then((cloudStores) => {
+          if (cloudStores && Array.isArray(cloudStores) && cloudStores.length > 0) {
+            setSubscribers(cloudStores);
+            saveSubscribers(cloudStores);
+          }
+        })
+        .catch(() => {});
+
+      cloudGetMasterConfig(url)
+        .then((config) => {
+          if (config?.plans && Array.isArray(config.plans) && config.plans.length > 0) {
+            setSubscriptionPlans(config.plans);
+            saveSubscriptionPlans(config.plans);
+          }
+          if (config?.settings?.systemCode) {
+            setSystemCodeState(config.settings.systemCode);
+            setSystemCode(config.settings.systemCode);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [masterScriptUrl]);
 
   const handleAddSubscriber = (sub: StoreSubscriber) => {
     setSubscribers((prev) => [sub, ...prev]);
@@ -1339,6 +1369,7 @@ export default function App() {
         showToast={showToast}
         subscribers={subscribers}
         masterScriptUrl={masterScriptUrl}
+        onSubscribersRefreshed={(newSubs) => setSubscribers(newSubs)}
       />
 
       <AdminLoginModal

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { RtgLogo } from "./RtgLogo";
 import { StoreSubscriber } from "../types";
-import { normalizeScriptUrl } from "../services/cloudService";
+import { normalizeScriptUrl, cloudGetSubscribers } from "../services/cloudService";
+import { DEFAULT_MASTER_SCRIPT_URL, saveSubscribers } from "../data/initialStores";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface LoginModalProps {
   showToast: (msg: string, type?: "success" | "error" | "info") => void;
   subscribers?: StoreSubscriber[];
   masterScriptUrl?: string;
+  onSubscribersRefreshed?: (subs: StoreSubscriber[]) => void;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -25,6 +27,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   showToast,
   subscribers = [],
   masterScriptUrl = "",
+  onSubscribersRefreshed,
 }) => {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +37,60 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleLogin = () => {
+  const effectiveMasterUrl = (masterScriptUrl && masterScriptUrl.trim()) || DEFAULT_MASTER_SCRIPT_URL;
+
+  const verifyAndProceed = (sub: StoreSubscriber, cleanPass: string): boolean => {
+    // Check password if set
+    if (sub.password && cleanPass && sub.password !== cleanPass) {
+      setLoading(false);
+      setErrorMessage("كلمة المرور غير صحيحة، يرجى التأكد من كلمة المرور الخاصة بحسابك");
+      showToast("كلمة المرور غير صحيحة", "error");
+      return false;
+    }
+
+    // Check account status
+    if (sub.status === "معلق") {
+      setLoading(false);
+      setErrorMessage("تم تعليق حساب هذا المتجر مؤقتاً، يرجى التواصل مع الإدارة: 0934590635");
+      showToast("حساب المتجر معلق حالياً", "error");
+      return false;
+    }
+
+    // Check subscription expiration date
+    if (sub.endDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const end = new Date(sub.endDate);
+      end.setHours(23, 59, 59, 999);
+
+      if (end.getTime() < today.getTime()) {
+        setLoading(false);
+        setErrorMessage(
+          `انتهت صلاحية اشتراك المتجر بتاريخ (${sub.endDate}). يرجى التواصل مع الإدارة للتجديد: 0934590635`
+        );
+        showToast("عذراً، اشتراك المتجر منتهي الصلاحية", "error");
+        return false;
+      }
+    }
+
+    // Success
+    setLoading(false);
+    const targetUrl = sub.cloudUrl
+      ? normalizeScriptUrl(sub.cloudUrl).url
+      : effectiveMasterUrl;
+
+    onSuccess(
+      sub.storeCode,
+      targetUrl,
+      sub.storeName,
+      sub.username,
+      sub
+    );
+    showToast(`مرحباً بك مجدداً في ${sub.storeName} ✓`, "success");
+    return true;
+  };
+
+  const handleLogin = async () => {
     const cleanId = identifier.trim();
     const cleanPass = password.trim();
 
@@ -47,71 +103,47 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setLoading(true);
     setErrorMessage("");
 
-    // 1. Check local subscribers database
-    const foundSub = subscribers.find(
+    // 1. Check local subscribers database first
+    let foundSub = subscribers.find(
       (s) =>
         s.storeCode.toUpperCase() === cleanId.toUpperCase() ||
         s.username.toLowerCase() === cleanId.toLowerCase()
     );
 
     if (foundSub) {
-      // Check password if set
-      if (foundSub.password && cleanPass && foundSub.password !== cleanPass) {
-        setLoading(false);
-        setErrorMessage("كلمة المرور غير صحيحة، يرجى التأكد من كلمة المرور الخاصة بحسابك");
-        showToast("كلمة المرور غير صحيحة", "error");
-        return;
+      // If password matches or user didn't change it, verify immediately
+      if (!foundSub.password || !cleanPass || foundSub.password === cleanPass) {
+        if (verifyAndProceed(foundSub, cleanPass)) return;
       }
-
-      // Check account status
-      if (foundSub.status === "معلق") {
-        setLoading(false);
-        setErrorMessage("تم تعليق حساب هذا المتجر مؤقتاً، يرجى التواصل مع الإدارة: 0934590635");
-        showToast("حساب المتجر معلق حالياً", "error");
-        return;
-      }
-
-      // Check subscription expiration date
-      if (foundSub.endDate) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const end = new Date(foundSub.endDate);
-        end.setHours(23, 59, 59, 999);
-
-        if (end.getTime() < today.getTime()) {
-          setLoading(false);
-          setErrorMessage(
-            `انتهت صلاحية اشتراك المتجر بتاريخ (${foundSub.endDate}). يرجى التواصل مع الإدارة للتجديد: 0934590635`
-          );
-          showToast("عذراً، اشتراك المتجر منتهي الصلاحية", "error");
-          return;
-        }
-      }
-
-      // Success with local subscriber record
-      setTimeout(() => {
-        setLoading(false);
-        const targetUrl = foundSub.cloudUrl
-          ? normalizeScriptUrl(foundSub.cloudUrl).url
-          : masterScriptUrl;
-
-        onSuccess(
-          foundSub.storeCode,
-          targetUrl,
-          foundSub.storeName,
-          foundSub.username,
-          foundSub
-        );
-        showToast(`مرحباً بك مجدداً في ${foundSub.storeName} ✓`, "success");
-      }, 400);
-      return;
     }
 
-    // 2. Remote check via Master Apps Script (if not found in local cache)
-    if (masterScriptUrl) {
+    // 2. Query Central Cloud live via cloudGetSubscribers
+    if (effectiveMasterUrl) {
+      try {
+        const freshSubs = await cloudGetSubscribers(effectiveMasterUrl);
+        if (freshSubs && freshSubs.length > 0) {
+          saveSubscribers(freshSubs);
+          if (onSubscribersRefreshed) {
+            onSubscribersRefreshed(freshSubs);
+          }
+          foundSub = freshSubs.find(
+            (s) =>
+              s.storeCode.toUpperCase() === cleanId.toUpperCase() ||
+              s.username.toLowerCase() === cleanId.toLowerCase()
+          );
+          if (foundSub) {
+            if (verifyAndProceed(foundSub, cleanPass)) return;
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Live cloud check fallback to JSONP", err);
+      }
+
+      // 3. Remote check via checkLicense action JSONP fallback
       const callbackName = "onLicenseChecked_" + Date.now();
       const script = document.createElement("script");
-      const checkUrl = `${masterScriptUrl}?action=checkLicense&key=${encodeURIComponent(
+      const checkUrl = `${effectiveMasterUrl}?action=checkLicense&key=${encodeURIComponent(
         cleanId
       )}&password=${encodeURIComponent(cleanPass)}&callback=${callbackName}`;
       script.src = checkUrl;
@@ -122,9 +154,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           document.getElementById(callbackName)?.remove();
         }
         setLoading(false);
-        setErrorMessage("تعذر الاتصال بالخادم الرئيسي، تأكد من اتصال الإنترنت وصحة الرابط");
-        showToast("تعذر التحقق من الخادم السحابي", "error");
-      }, 5000);
+        setErrorMessage("تعذر التحقق من الخادم، يرجى التأكد من اتصال الإنترنت أو صحة اسم المستخدم");
+        showToast("تعذر الاتصال بالخادم السحابي", "error");
+      }, 7000);
 
       (window as unknown as Record<
         string,
@@ -151,7 +183,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         if (response && response.valid) {
           const rawUrl = response.cloudUrl || response.scriptUrl || "";
-          const targetUrl = rawUrl ? normalizeScriptUrl(rawUrl).url : masterScriptUrl;
+          const targetUrl = rawUrl ? normalizeScriptUrl(rawUrl).url : effectiveMasterUrl;
           const storeName = response.storeName || response.shopName || `متجر ${cleanId}`;
           const storeCode = response.storeCode || cleanId;
           const username = response.username || cleanId;
@@ -187,10 +219,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // 3. Not registered in local database and no master server
     setLoading(false);
     setErrorMessage(
-      "بيانات الدخول غير مسجلة في قاعدة بيانات المشتركين. الدخول متاح فقط للمشتركين المسجلين."
+      "بيانات الدخول غير مسجلة في قاعدة بيانات المشتركين. يرجى التأكد من اسم المستخدم وكلمة المرور."
     );
     showToast("الحساب غير مسجل في المنظومة", "error");
   };

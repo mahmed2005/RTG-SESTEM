@@ -15,6 +15,7 @@ import {
 } from "../services/cloudService";
 import {
   DEFAULT_SUBSCRIPTION_PLANS,
+  DEFAULT_MASTER_SCRIPT_URL,
   loadSubscriptionPlans,
   saveSubscriptionPlans,
   getSystemCode,
@@ -88,7 +89,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newNotes, setNewNotes] = useState("");
 
   // Master Script URL input state
-  const [masterUrlInput, setMasterUrlInput] = useState(masterScriptUrl);
+  const [masterUrlInput, setMasterUrlInput] = useState(
+    () => masterScriptUrl || DEFAULT_MASTER_SCRIPT_URL
+  );
   const [testingMaster, setTestingMaster] = useState(false);
   const [masterStatus, setMasterStatus] = useState<string | null>(null);
 
