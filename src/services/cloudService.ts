@@ -71,7 +71,8 @@ export async function sendCloudAction(url: string, payload: Record<string, any>)
 }
 
 /**
- * Read data from Apps Script (with automatic JSONP fallback for 100% reliability)
+ * Read data from Apps Script via safe fetch
+ * Handles standard JSON, JSONP wrappers, and timeouts without DOM script injection or cross-origin errors
  */
 export async function fetchCloudData<T>(
   url: string,
@@ -81,72 +82,51 @@ export async function fetchCloudData<T>(
   const { url: cleanUrl } = normalizeScriptUrl(url);
   if (!cleanUrl || !cleanUrl.startsWith("http")) return null;
 
-  const urlObj = new URL(cleanUrl);
-  urlObj.searchParams.set("action", action);
-  Object.entries(params).forEach(([k, v]) => urlObj.searchParams.set(k, v));
-  urlObj.searchParams.set("_t", Date.now().toString());
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 9000);
 
-  // 1. Try direct fetch
   try {
+    const urlObj = new URL(cleanUrl);
+    urlObj.searchParams.set("action", action);
+    Object.entries(params).forEach(([k, v]) => urlObj.searchParams.set(k, v));
+    urlObj.searchParams.set("_t", Date.now().toString());
+
     const res = await fetch(urlObj.toString(), {
       method: "GET",
-      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json, text/plain, */*",
+      },
     });
-    const contentType = res.headers.get("content-type") || "";
-    if (res.ok && contentType.includes("application/json")) {
-      const data = await res.json();
-      return data as T;
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const text = await res.text();
+      const trimmed = text.trim();
+
+      // Standard JSON response
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          return JSON.parse(trimmed) as T;
+        } catch {}
+      }
+
+      // JSONP callback wrapper: callback_name({...})
+      const jsonpMatch = trimmed.match(/^[a-zA-Z0-9_$]+\s*\(([\s\S]*)\)\s*;?$/);
+      if (jsonpMatch && jsonpMatch[1]) {
+        try {
+          return JSON.parse(jsonpMatch[1]) as T;
+        } catch {}
+      }
     }
   } catch {
-    // Direct fetch prevented or returned redirect/CORS, proceed smoothly to JSONP fallback
+    // Network errors, timeouts, or CORS restrictions handled gracefully without throwing unhandled exceptions
+  } finally {
+    clearTimeout(timeoutId);
   }
 
-  // 2. Guaranteed JSONP fallback
-  return new Promise((resolve) => {
-    const cbName = "rtg_cloud_cb_" + Math.random().toString(36).substring(2, 9);
-    urlObj.searchParams.set("callback", cbName);
-
-    const script = document.createElement("script");
-    script.src = urlObj.toString();
-    script.async = true;
-
-    let finished = false;
-    const timer = setTimeout(() => {
-      if (!finished) {
-        finished = true;
-        clean();
-        resolve(null);
-      }
-    }, 12000);
-
-    const clean = () => {
-      clearTimeout(timer);
-      try {
-        delete (window as any)[cbName];
-      } catch {}
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
-    };
-
-    (window as any)[cbName] = (data: any) => {
-      if (!finished) {
-        finished = true;
-        clean();
-        resolve(data as T);
-      }
-    };
-
-    script.onerror = () => {
-      if (!finished) {
-        finished = true;
-        clean();
-        resolve(null);
-      }
-    };
-
-    document.head.appendChild(script);
-  });
+  return null;
 }
 
 // ==========================================

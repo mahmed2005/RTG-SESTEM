@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { RtgLogo } from "./RtgLogo";
 import { StoreSubscriber } from "../types";
-import { normalizeScriptUrl, cloudGetSubscribers } from "../services/cloudService";
+import { normalizeScriptUrl, cloudGetSubscribers, fetchCloudData } from "../services/cloudService";
 import { DEFAULT_MASTER_SCRIPT_URL, saveSubscribers } from "../data/initialStores";
 
 interface LoginModalProps {
@@ -140,27 +140,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         console.warn("Live cloud check fallback to JSONP", err);
       }
 
-      // 3. Remote check via checkLicense action JSONP fallback
-      const callbackName = "onLicenseChecked_" + Date.now();
-      const script = document.createElement("script");
-      const checkUrl = `${effectiveMasterUrl}?action=checkLicense&key=${encodeURIComponent(
-        cleanId
-      )}&password=${encodeURIComponent(cleanPass)}&callback=${callbackName}`;
-      script.src = checkUrl;
-      script.id = callbackName;
-
-      const timeoutId = setTimeout(() => {
-        if (document.getElementById(callbackName)) {
-          document.getElementById(callbackName)?.remove();
-        }
-        setLoading(false);
-        setErrorMessage("تعذر التحقق من الخادم، يرجى التأكد من اتصال الإنترنت أو صحة اسم المستخدم");
-        showToast("تعذر الاتصال بالخادم السحابي", "error");
-      }, 7000);
-
-      (window as unknown as Record<
-        string,
-        (res: {
+      // 3. Remote check via checkLicense action
+      try {
+        const response = await fetchCloudData<{
           valid?: boolean;
           cloudUrl?: string;
           scriptUrl?: string;
@@ -172,13 +154,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           endDate?: string;
           plan?: string;
           message?: string;
-        }) => void
-      >)[callbackName] = (response) => {
-        clearTimeout(timeoutId);
-        if (document.getElementById(callbackName)) {
-          document.getElementById(callbackName)?.remove();
-        }
-        delete (window as unknown as Record<string, unknown>)[callbackName];
+        }>(effectiveMasterUrl, "checkLicense", { key: cleanId, password: cleanPass });
+
         setLoading(false);
 
         if (response && response.valid) {
@@ -206,17 +183,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             }
           );
           showToast(`مرحباً بك! تم التحقق من اشتراك ${storeName} بنجاح ✓`, "success");
-        } else {
-          const msg =
-            response?.message ||
-            "كود المتجر أو كلمة المرور غير صحيحة، أو الحساب غير مسجل في قائمة المشتركين";
-          setErrorMessage(msg);
-          showToast(msg, "error");
+          return;
+        } else if (response && response.message) {
+          setErrorMessage(response.message);
+          showToast(response.message, "error");
+          return;
         }
-      };
-
-      document.body.appendChild(script);
-      return;
+      } catch {
+        setLoading(false);
+        setErrorMessage("تعذر الاتصال بالخادم السحابي");
+        showToast("تعذر الاتصال بالخادم السحابي", "error");
+        return;
+      }
     }
 
     setLoading(false);

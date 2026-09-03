@@ -1,4 +1,5 @@
 import { StoreSubscriber, SubscriptionPlan } from "../types";
+import { safeStorage } from "../utils/storage";
 
 export const DEFAULT_ADMIN_PASSWORD = "rtg@admin2025";
 export const DEFAULT_MASTER_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxST8gCnxrB9XL0fTMSa5bWu1iAoBbcAtpRZSr3mm83ARgVPMaiF4J4db9biR52DLS8/exec";
@@ -124,7 +125,7 @@ export const INITIAL_SUBSCRIBERS: StoreSubscriber[] = [
 // Helper functions for storage
 export function getSavedSubscribers(): StoreSubscriber[] {
   try {
-    const raw = localStorage.getItem(SUBSCRIBERS_STORAGE_KEY);
+    const raw = safeStorage.getItem(SUBSCRIBERS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -139,33 +140,33 @@ export function getSavedSubscribers(): StoreSubscriber[] {
 
 export function saveSubscribers(subscribers: StoreSubscriber[]): void {
   try {
-    localStorage.setItem(SUBSCRIBERS_STORAGE_KEY, JSON.stringify(subscribers));
+    safeStorage.setItem(SUBSCRIBERS_STORAGE_KEY, JSON.stringify(subscribers));
   } catch (e) {
     console.error("Error saving subscribers:", e);
   }
 }
 
 export function getAdminPassword(): string {
-  return localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || DEFAULT_ADMIN_PASSWORD;
+  return safeStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || DEFAULT_ADMIN_PASSWORD;
 }
 
 export function setAdminPassword(newPass: string): void {
-  localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, newPass);
+  safeStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, newPass);
 }
 
 export function getMasterScriptUrl(): string {
-  const saved = localStorage.getItem(MASTER_SCRIPT_STORAGE_KEY);
+  const saved = safeStorage.getItem(MASTER_SCRIPT_STORAGE_KEY);
   if (saved && saved.trim()) return saved.trim();
   return DEFAULT_MASTER_SCRIPT_URL;
 }
 
 export function setMasterScriptUrl(url: string): void {
-  localStorage.setItem(MASTER_SCRIPT_STORAGE_KEY, url.trim() || DEFAULT_MASTER_SCRIPT_URL);
+  safeStorage.setItem(MASTER_SCRIPT_STORAGE_KEY, url.trim() || DEFAULT_MASTER_SCRIPT_URL);
 }
 
 export function getSubscriptionPlans(): SubscriptionPlan[] {
   try {
-    const raw = localStorage.getItem(SUBSCRIPTION_PLANS_STORAGE_KEY);
+    const raw = safeStorage.getItem(SUBSCRIPTION_PLANS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -180,7 +181,7 @@ export function getSubscriptionPlans(): SubscriptionPlan[] {
 
 export function saveSubscriptionPlans(plans: SubscriptionPlan[]): void {
   try {
-    localStorage.setItem(SUBSCRIPTION_PLANS_STORAGE_KEY, JSON.stringify(plans));
+    safeStorage.setItem(SUBSCRIPTION_PLANS_STORAGE_KEY, JSON.stringify(plans));
   } catch (e) {
     console.error("Error saving subscription plans:", e);
   }
@@ -191,11 +192,11 @@ export const DEFAULT_SYSTEM_CODE = "RTG-SYSTEM-2025";
 export const MASTER_SETTINGS_STORAGE_KEY = "rtg_master_settings";
 
 export function getSystemCode(): string {
-  return localStorage.getItem(SYSTEM_CODE_STORAGE_KEY) || DEFAULT_SYSTEM_CODE;
+  return safeStorage.getItem(SYSTEM_CODE_STORAGE_KEY) || DEFAULT_SYSTEM_CODE;
 }
 
 export function setSystemCode(code: string): void {
-  localStorage.setItem(SYSTEM_CODE_STORAGE_KEY, code.trim());
+  safeStorage.setItem(SYSTEM_CODE_STORAGE_KEY, code.trim());
 }
 
 export function loadMasterSettings(): {
@@ -207,7 +208,7 @@ export function loadMasterSettings(): {
   updatedAt?: string;
 } {
   try {
-    const raw = localStorage.getItem(MASTER_SETTINGS_STORAGE_KEY);
+    const raw = safeStorage.getItem(MASTER_SETTINGS_STORAGE_KEY);
     if (raw) {
       return {
         masterScriptUrl: getMasterScriptUrl(),
@@ -233,7 +234,7 @@ export function saveMasterSettings(settings: Record<string, any>): void {
     if (settings.masterScriptUrl !== undefined) setMasterScriptUrl(settings.masterScriptUrl);
     if (settings.adminPassword !== undefined) setAdminPassword(settings.adminPassword);
     if (settings.systemCode !== undefined) setSystemCode(settings.systemCode);
-    localStorage.setItem(MASTER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    safeStorage.setItem(MASTER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch (e) {
     console.error("Error saving master settings:", e);
   }
