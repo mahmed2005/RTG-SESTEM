@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { RtgLogo } from "./RtgLogo";
 import { StoreSubscriber } from "../types";
+import { normalizeScriptUrl } from "../services/cloudService";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -46,7 +47,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setLoading(true);
     setErrorMessage("");
 
-    // 1. Check local subscribers list
+    // 1. Check local subscribers database
     const foundSub = subscribers.find(
       (s) =>
         s.storeCode.toUpperCase() === cleanId.toUpperCase() ||
@@ -57,20 +58,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       // Check password if set
       if (foundSub.password && cleanPass && foundSub.password !== cleanPass) {
         setLoading(false);
-        setErrorMessage("كلمة المرور غير صحيحة، يرجى المحاولة مجدداً");
+        setErrorMessage("كلمة المرور غير صحيحة، يرجى التأكد من كلمة المرور الخاصة بحسابك");
         showToast("كلمة المرور غير صحيحة", "error");
         return;
       }
 
-      // Check status
+      // Check account status
       if (foundSub.status === "معلق") {
         setLoading(false);
-        setErrorMessage("تم تعليق هذا المتجر مؤقتاً، يرجى التواصل مع الإدارة: 0934590635");
+        setErrorMessage("تم تعليق حساب هذا المتجر مؤقتاً، يرجى التواصل مع الإدارة: 0934590635");
         showToast("حساب المتجر معلق حالياً", "error");
         return;
       }
 
-      // Check expiration date
+      // Check subscription expiration date
       if (foundSub.endDate) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -87,43 +88,26 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         }
       }
 
-      // Success with subscriber record
+      // Success with local subscriber record
       setTimeout(() => {
         setLoading(false);
+        const targetUrl = foundSub.cloudUrl
+          ? normalizeScriptUrl(foundSub.cloudUrl).url
+          : masterScriptUrl;
+
         onSuccess(
           foundSub.storeCode,
-          foundSub.cloudUrl || masterScriptUrl,
+          targetUrl,
           foundSub.storeName,
           foundSub.username,
           foundSub
         );
         showToast(`مرحباً بك مجدداً في ${foundSub.storeName} ✓`, "success");
-      }, 500);
+      }, 400);
       return;
     }
 
-    // 2. Support quick demo / test keys locally
-    if (
-      cleanId.toUpperCase().includes("DEMO") ||
-      cleanId.toUpperCase().includes("RTG") ||
-      cleanId.toUpperCase().includes("VIP") ||
-      cleanId === "123456"
-    ) {
-      setTimeout(() => {
-        setLoading(false);
-        onSuccess(
-          cleanId.toUpperCase(),
-          masterScriptUrl ||
-            "https://script.google.com/macros/s/AKfycbxK9GGz87EzNCezo_Smm8If_wpVLTZ1UrlE-JDRkPQOwFaQVGkurxM_oj-8WE-BHMNc8Q/exec",
-          `متجر ${cleanId.toUpperCase()}`,
-          cleanId
-        );
-        showToast("✓ تم تفعيل المنظومة بنجاح!", "success");
-      }, 600);
-      return;
-    }
-
-    // 3. Remote check via Master Apps Script (if URL is set)
+    // 2. Remote check via Master Apps Script (if not found in local cache)
     if (masterScriptUrl) {
       const callbackName = "onLicenseChecked_" + Date.now();
       const script = document.createElement("script");
@@ -138,13 +122,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           document.getElementById(callbackName)?.remove();
         }
         setLoading(false);
-        setErrorMessage("تعذر التحقق من الخادم، تأكد من كود المتجر وكلمة المرور");
-        showToast("تعذر التحقق من الاشتراك السحابي", "error");
-      }, 4000);
+        setErrorMessage("تعذر الاتصال بالخادم الرئيسي، تأكد من اتصال الإنترنت وصحة الرابط");
+        showToast("تعذر التحقق من الخادم السحابي", "error");
+      }, 5000);
 
       (window as unknown as Record<
         string,
-        (res: { valid?: boolean; scriptUrl?: string; shopName?: string; message?: string }) => void
+        (res: {
+          valid?: boolean;
+          cloudUrl?: string;
+          scriptUrl?: string;
+          storeName?: string;
+          shopName?: string;
+          storeCode?: string;
+          username?: string;
+          startDate?: string;
+          endDate?: string;
+          plan?: string;
+          message?: string;
+        }) => void
       >)[callbackName] = (response) => {
         clearTimeout(timeoutId);
         if (document.getElementById(callbackName)) {
@@ -154,15 +150,34 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         setLoading(false);
 
         if (response && response.valid) {
+          const rawUrl = response.cloudUrl || response.scriptUrl || "";
+          const targetUrl = rawUrl ? normalizeScriptUrl(rawUrl).url : masterScriptUrl;
+          const storeName = response.storeName || response.shopName || `متجر ${cleanId}`;
+          const storeCode = response.storeCode || cleanId;
+          const username = response.username || cleanId;
+
           onSuccess(
-            cleanId,
-            response.scriptUrl || masterScriptUrl,
-            response.shopName || `متجر ${cleanId}`,
-            cleanId
+            storeCode,
+            targetUrl,
+            storeName,
+            username,
+            {
+              id: "REMOTE-" + Date.now(),
+              storeCode,
+              storeName,
+              username,
+              cloudUrl: targetUrl,
+              startDate: response.startDate || "",
+              endDate: response.endDate || "",
+              plan: response.plan || "شهري",
+              status: "نشط",
+            }
           );
-          showToast("مرحباً بك! تم التحقق من الترخيص السحابي بنجاح ✓", "success");
+          showToast(`مرحباً بك! تم التحقق من اشتراك ${storeName} بنجاح ✓`, "success");
         } else {
-          const msg = response?.message || "كود المتجر أو كلمة المرور غير صحيحة!";
+          const msg =
+            response?.message ||
+            "كود المتجر أو كلمة المرور غير صحيحة، أو الحساب غير مسجل في قائمة المشتركين";
           setErrorMessage(msg);
           showToast(msg, "error");
         }
@@ -172,10 +187,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // 4. If nothing matched and no master URL
+    // 3. Not registered in local database and no master server
     setLoading(false);
-    setErrorMessage("كود المتجر أو اسم المستخدم غير مسجل في النظام. تواصل مع الإدارة للحصول على ترخيص.");
-    showToast("بيانات الدخول غير مسجلة", "error");
+    setErrorMessage(
+      "بيانات الدخول غير مسجلة في قاعدة بيانات المشتركين. الدخول متاح فقط للمشتركين المسجلين."
+    );
+    showToast("الحساب غير مسجل في المنظومة", "error");
   };
 
   return (

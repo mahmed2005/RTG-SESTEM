@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Product,
   ProductsMap,
@@ -27,9 +27,13 @@ import {
   cloudRestockProduct,
   cloudUpdateProductPrice,
   cloudSaveDebt,
+  cloudDeleteDebt,
   cloudSaveSubscriber,
   cloudDeleteSubscriber,
+  normalizeScriptUrl,
 } from "./services/cloudService";
+import { soundFx } from "./services/soundEffects";
+import { motion, AnimatePresence } from "motion/react";
 import { RtgLogo } from "./components/RtgLogo";
 import { ToastContainer } from "./components/ToastContainer";
 import { SplashScreen } from "./components/SplashScreen";
@@ -88,10 +92,25 @@ export default function App() {
     }
   };
 
-  const handleDeleteSubscriber = (id: string) => {
-    setSubscribers((prev) => prev.filter((s) => s.id !== id));
+  const handleDeleteSubscriber = (id: string, storeCode?: string, username?: string) => {
+    const subToDelete = subscribers.find(
+      (s) => s.id === id || (storeCode && s.storeCode === storeCode)
+    );
+    const finalCode = storeCode || subToDelete?.storeCode || id;
+    const finalUser = username || subToDelete?.username || "";
+
+    setSubscribers((prev) =>
+      prev.filter((s) => s.id !== id && (!finalCode || s.storeCode !== finalCode))
+    );
+
     if (masterScriptUrl) {
-      cloudDeleteSubscriber(masterScriptUrl, id).catch(() => {});
+      cloudDeleteSubscriber(masterScriptUrl, finalCode, id, finalUser).catch(() => {});
+    }
+
+    // If currently logged into this store, logout cleanly
+    const currentStoreCode = localStorage.getItem(STORAGE_KEYS.LICENSE_KEY);
+    if (currentStoreCode && (currentStoreCode === finalCode || currentStoreCode === id)) {
+      handleConfirmLogout();
     }
   };
 
@@ -107,7 +126,8 @@ export default function App() {
 
   // Login as store from Admin Panel
   const handleLoginAsStore = async (sub: StoreSubscriber) => {
-    const finalUrl = sub.cloudUrl || masterScriptUrl;
+    const rawUrl = sub.cloudUrl || masterScriptUrl;
+    const finalUrl = rawUrl ? normalizeScriptUrl(rawUrl).url : "";
     localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, sub.storeCode);
     localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, finalUrl);
     localStorage.setItem(STORAGE_KEYS.SHOP_NAME, sub.storeName);
@@ -127,6 +147,8 @@ export default function App() {
           if (cloudData.products) setProducts(cloudData.products);
           if (cloudData.orders) setOrders(cloudData.orders);
           if (cloudData.debts) setDebts(cloudData.debts);
+          const pCount = cloudData.products ? Object.keys(cloudData.products).length : 0;
+          showToast(`✓ تم جلب بيانات المتجر بنجاح (${pCount} منتج)`, "success");
         }
       } catch {
         // handled
@@ -301,7 +323,8 @@ export default function App() {
     _email: string,
     subscriber?: StoreSubscriber
   ) => {
-    const finalApiUrl = subscriber?.cloudUrl || scriptUrl;
+    const rawUrl = subscriber?.cloudUrl || scriptUrl;
+    const finalApiUrl = rawUrl ? normalizeScriptUrl(rawUrl).url : "";
     const finalShopName = subscriber?.storeName || verifiedShopName;
 
     localStorage.setItem(STORAGE_KEYS.LICENSE_KEY, licenseKey);
@@ -328,6 +351,8 @@ export default function App() {
           const pCount = cloudData.products ? Object.keys(cloudData.products).length : 0;
           const oCount = cloudData.orders ? cloudData.orders.length : 0;
           showToast(`✓ تم استلام بيانات متجرك بنجاح (${pCount} منتج، ${oCount} فاتورة)`, "success", 4000);
+        } else {
+          showToast("تم تسجيل الدخول. لم يتم العثور على منتجات سابقة في الشيت أو جاري تجهيزه", "info", 4000);
         }
       } catch (err) {
         console.error("Auto sync on login error:", err);
@@ -387,13 +412,154 @@ export default function App() {
     setIsLogoutOpen(false);
     setIsDemoMode(false);
     setApiUrl("");
-    setShopName("RTG-SESTEM");
+    setShopName("RTG-SYSTEM");
     setProducts({});
     setOrders([]);
     setDebts([]);
     setScreen("landing");
     showToast("تم تسجيل الخروج بنجاح", "info");
   };
+
+  // Helper to extract items to restore from an order
+  const extractOrderItems = (
+    order: Order,
+    currentProducts: ProductsMap
+  ): { code: string; qty: number; name: string }[] => {
+    if (order.cartItems && order.cartItems.length > 0) {
+      return order.cartItems.map((item) => ({
+        code: item.code,
+        qty: Number(item.qty) || 1,
+        name: item.name,
+      }));
+    }
+
+    const items: { code: string; qty: number; name: string }[] = [];
+    const parts = (order.desc || "").split(/[،,\n]/);
+
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+
+      const match = trimmed.match(
+        /^(\d+(?:\.\d+)?)\s*[xX×*]\s*(?:\[([^\]]+)\])?\s*(.*)$/
+      );
+      if (match) {
+        const qty = parseFloat(match[1]) || 1;
+        let code = match[2] ? match[2].trim() : "";
+        const rawName = match[3] ? match[3].trim() : trimmed;
+
+        if (!code) {
+          const foundKey = Object.keys(currentProducts).find(
+            (k) =>
+              currentProducts[k].name.trim().toLowerCase() ===
+              rawName.toLowerCase()
+          );
+          code = foundKey || rawName;
+        }
+
+        items.push({ code, qty, name: rawName });
+      } else {
+        const codeMatch = trimmed.match(/\[([^\]]+)\]/);
+        let code = codeMatch ? codeMatch[1].trim() : "";
+        const cleanName = trimmed.replace(/\[[^\]]+\]/, "").trim();
+
+        if (!code) {
+          const foundKey = Object.keys(currentProducts).find(
+            (k) =>
+              currentProducts[k].name.trim().toLowerCase() ===
+              cleanName.toLowerCase()
+          );
+          code = foundKey || cleanName;
+        }
+
+        items.push({ code, qty: 1, name: cleanName });
+      }
+    }
+
+    return items;
+  };
+
+  // High-frequency Real-time Synchronization Loop
+  const isSyncingRef = useRef(false);
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const performInstantSync = useCallback(
+    async (isSilent = true) => {
+      if (!apiUrl || isDemoMode || screen !== "app" || isSyncingRef.current) return;
+      isSyncingRef.current = true;
+      if (!isSilent) setIsSyncing(true);
+
+      try {
+        const cloudData = await syncStoreFromCloud(apiUrl);
+        if (cloudData && cloudData.success) {
+          if (cloudData.products && Object.keys(cloudData.products).length > 0) {
+            setProducts((prev) => {
+              const prevStr = JSON.stringify(prev);
+              const nextStr = JSON.stringify(cloudData.products);
+              return prevStr !== nextStr ? cloudData.products! : prev;
+            });
+          }
+          if (cloudData.orders && cloudData.orders.length > 0) {
+            setOrders((prev) => {
+              const prevStr = JSON.stringify(prev);
+              const nextStr = JSON.stringify(cloudData.orders);
+              return prevStr !== nextStr ? cloudData.orders! : prev;
+            });
+          }
+          if (cloudData.debts) {
+            setDebts((prev) => {
+              const prevStr = JSON.stringify(prev);
+              const nextStr = JSON.stringify(cloudData.debts);
+              return prevStr !== nextStr ? cloudData.debts! : prev;
+            });
+          }
+        }
+      } catch {
+        // Silent catch for continuous synchronization
+      } finally {
+        isSyncingRef.current = false;
+        if (!isSilent) setIsSyncing(false);
+      }
+    },
+    [apiUrl, isDemoMode, screen]
+  );
+
+  const triggerInstantCloudSync = useCallback(
+    (delayMs = 300) => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = setTimeout(() => {
+        performInstantSync(true);
+      }, delayMs);
+    },
+    [performInstantSync]
+  );
+
+  // Auto poll continuously every 3 seconds, plus on focus/visibility
+  useEffect(() => {
+    if (!apiUrl || isDemoMode || screen !== "app") return;
+
+    const interval = setInterval(() => {
+      performInstantSync(true);
+    }, 3000);
+
+    const handleFocus = () => {
+      performInstantSync(true);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [apiUrl, isDemoMode, screen, performInstantSync]);
+
+  // Fast sync on tab change
+  useEffect(() => {
+    triggerInstantCloudSync(100);
+  }, [activeTab, triggerInstantCloudSync]);
 
   // Order Handlers
   const handleOrderCreated = (newOrder: Order, updatedProducts: ProductsMap) => {
@@ -403,6 +569,7 @@ export default function App() {
     // Send real-time addition to Google Sheet
     if (apiUrl && !isDemoMode) {
       cloudAddOrder(apiUrl, newOrder).catch(() => {});
+      triggerInstantCloudSync(500);
     }
   };
 
@@ -414,6 +581,7 @@ export default function App() {
 
     if (apiUrl && !isDemoMode) {
       cloudUpdateOrderStatus(apiUrl, orderId, nextStatus).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -421,28 +589,41 @@ export default function App() {
     const targetOrder = orders.find((o) => o.id === invoiceId);
     if (!targetOrder) return;
 
-    // Restore stock if cartItems available
-    if (targetOrder.cartItems && targetOrder.cartItems.length > 0) {
-      setProducts((prev) => {
-        const next: ProductsMap = { ...prev };
-        targetOrder.cartItems?.forEach((item) => {
-          if (next[item.code]) {
-            next[item.code] = {
-              ...next[item.code],
-              qty: next[item.code].qty + item.qty,
+    // 1. Extract items to restore from this order
+    const itemsToRestore = extractOrderItems(targetOrder, products);
+
+    // 2. Replenish inventory stock immediately
+    setProducts((prev) => {
+      const next: ProductsMap = { ...prev };
+      itemsToRestore.forEach((item) => {
+        if (next[item.code]) {
+          next[item.code] = {
+            ...next[item.code],
+            qty: next[item.code].qty + item.qty,
+          };
+        } else {
+          // If not found by barcode key, match by name
+          const keyByName = Object.keys(next).find(
+            (k) => next[k].name.trim().toLowerCase() === item.name.trim().toLowerCase()
+          );
+          if (keyByName) {
+            next[keyByName] = {
+              ...next[keyByName],
+              qty: next[keyByName].qty + item.qty,
             };
           }
-        });
-        return next;
+        }
       });
-    }
+      return next;
+    });
 
+    // 3. Mark order as returned with zero profit
     setOrders((prev) =>
       prev.map((o) =>
         o.id === invoiceId
           ? {
               ...o,
-              status: "راجع",
+              status: "مرتجع",
               profit: 0,
               returnNote: returnNote,
             }
@@ -450,12 +631,18 @@ export default function App() {
       )
     );
 
+    // 4. Send cloud updates: both refundOrder AND restockProduct for each item
     if (apiUrl && !isDemoMode) {
-      cloudRefundOrder(apiUrl, invoiceId, returnNote).catch(() => {});
+      cloudRefundOrder(apiUrl, invoiceId, itemsToRestore, returnNote).catch(() => {});
+      itemsToRestore.forEach((item) => {
+        cloudRestockProduct(apiUrl, item.code, item.qty).catch(() => {});
+      });
+      triggerInstantCloudSync(400);
     }
 
     setReturnInvoiceId(null);
-    showToast(`✓ تم إرجاع الفاتورة #${invoiceId} واستعادة السلع للمخزن`, "success");
+    soundFx.playReturn();
+    showToast(`✓ تم إرجاع الفاتورة #${invoiceId} واستعادة السلع للمخزن تلقائياً`, "success");
   };
 
   // Inventory Handlers
@@ -484,23 +671,8 @@ export default function App() {
     }));
 
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "addProduct",
-            barcode: codeOrBarcode,
-            name: finalProduct.name,
-            qty: finalProduct.qty,
-            cost: finalProduct.cost,
-            price: finalProduct.price,
-          }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudSaveProduct(apiUrl, codeOrBarcode, finalProduct).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -533,6 +705,7 @@ export default function App() {
       } catch {
         // silently handled
       }
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -544,16 +717,8 @@ export default function App() {
     });
 
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "deleteProduct", barcode: code }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudDeleteProduct(apiUrl, code).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -570,16 +735,8 @@ export default function App() {
     });
 
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "restockProduct", barcode, addedQty }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudRestockProduct(apiUrl, barcode, addedQty).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -596,16 +753,8 @@ export default function App() {
     });
 
     if (apiUrl && !isDemoMode) {
-      try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "updatePrice", barcode, newPrice }),
-        }).catch(() => {});
-      } catch {
-        // silently handled
-      }
+      cloudUpdateProductPrice(apiUrl, barcode, newPrice).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -638,6 +787,7 @@ export default function App() {
 
     if (apiUrl && !isDemoMode) {
       cloudSaveDebt(apiUrl, newDebt).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -665,6 +815,7 @@ export default function App() {
 
     if (apiUrl && !isDemoMode && updatedDebt) {
       cloudSaveDebt(apiUrl, updatedDebt).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -687,6 +838,7 @@ export default function App() {
 
     if (apiUrl && !isDemoMode && updatedDebt) {
       cloudSaveDebt(apiUrl, updatedDebt).catch(() => {});
+      triggerInstantCloudSync(400);
     }
   };
 
@@ -756,7 +908,7 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <RtgLogo size="header" />
                 <div className="text-right">
-                  <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white">RTG-SESTEM</h1>
+                  <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white">RTG-SYSTEM</h1>
                   <p className="text-[10px] text-slate-400 font-medium truncate max-w-[120px]" title={shopName}>
                     {shopName}
                   </p>
@@ -769,8 +921,12 @@ export default function App() {
                 القائمة الرئيسية
               </div>
 
-              <button
-                onClick={() => setActiveTab("pos")}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  soundFx.playClick();
+                  setActiveTab("pos");
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "pos"
                     ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
@@ -782,10 +938,14 @@ export default function App() {
                   <span>كشير البيع المباشر</span>
                 </div>
                 <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400">POS</span>
-              </button>
+              </motion.button>
 
-              <button
-                onClick={() => setActiveTab("orders")}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  soundFx.playClick();
+                  setActiveTab("orders");
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "orders"
                     ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
@@ -799,10 +959,14 @@ export default function App() {
                 <span className="text-[10px] bg-[#c5834e]/20 text-[#c5834e] px-2 py-0.5 rounded-full font-mono font-bold">
                   {orders.length}
                 </span>
-              </button>
+              </motion.button>
 
-              <button
-                onClick={() => setActiveTab("inventory")}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  soundFx.playClick();
+                  setActiveTab("inventory");
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "inventory"
                     ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
@@ -816,14 +980,18 @@ export default function App() {
                 <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400 font-mono">
                   {Object.keys(products).length}
                 </span>
-              </button>
+              </motion.button>
 
               <div className="pt-4 pb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 التقارير والديون
               </div>
 
-              <button
-                onClick={() => setActiveTab("dashboard")}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  soundFx.playClick();
+                  setActiveTab("dashboard");
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "dashboard"
                     ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
@@ -834,10 +1002,14 @@ export default function App() {
                   <i className="fa-solid fa-chart-pie text-sm w-4 text-center"></i>
                   <span>لوحة التقارير المالية</span>
                 </div>
-              </button>
+              </motion.button>
 
-              <button
-                onClick={() => setActiveTab("debts")}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  soundFx.playClick();
+                  setActiveTab("debts");
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
                   activeTab === "debts"
                     ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
@@ -851,7 +1023,7 @@ export default function App() {
                 <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full font-mono font-bold">
                   {debts.length}
                 </span>
-              </button>
+              </motion.button>
             </nav>
 
             {/* Sidebar User Footer */}
@@ -889,10 +1061,10 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <div className="lg:hidden flex items-center gap-2">
                   <RtgLogo size="header" />
-                  <span className="text-xs font-black text-slate-900 dark:text-white">RTG-SESTEM</span>
+                  <span className="text-xs font-black text-slate-900 dark:text-white">RTG-SYSTEM</span>
                 </div>
                 <h1 className="hidden sm:block text-sm sm:text-base font-bold text-slate-800 dark:text-white">
-                  منظومة RTG-SESTEM المتكاملة
+                  منظومة RTG-SYSTEM المتكاملة
                 </h1>
                 {isDemoMode ? (
                   <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full border border-amber-200 dark:border-amber-500/20 flex items-center gap-1.5">
@@ -900,10 +1072,19 @@ export default function App() {
                     وضع تجريبي
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    نظام نشط
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      نظام نشط
+                    </span>
+                    <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-full text-[10px] font-bold text-blue-700 dark:text-blue-400">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                      </span>
+                      <span>مزامنة لحظية مستمرة</span>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -914,30 +1095,46 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-1.5 border-r border-slate-200 dark:border-slate-800 pr-2 sm:pr-4">
-                  <button
-                    onClick={toggleTheme}
+                  <motion.button
+                    whileHover={{ scale: 1.06 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      toggleTheme();
+                    }}
                     className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                     title={theme === "dark" ? "التبديل إلى الوضع النهاري (Light Mode)" : "التبديل إلى الوضع الليلي (Dark Mode)"}
                   >
                     <i className={`fa-solid ${theme === "dark" ? "fa-sun text-amber-400" : "fa-moon text-indigo-500"} text-xs`}></i>
-                  </button>
+                  </motion.button>
 
-                  <button
-                    onClick={handleSyncData}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      handleSyncData();
+                    }}
                     disabled={isSyncing}
-                    className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                    title="مزامنة البيانات مع جوجل شيت"
+                    className="h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-bold"
+                    title="تحديث ومزامنة فورية مع جوجل شيت"
                   >
-                    <i className={`fa-solid fa-rotate ${isSyncing ? "fa-spin text-[#c5834e]" : ""} text-xs`}></i>
-                  </button>
+                    <i className={`fa-solid fa-rotate ${isSyncing ? "fa-spin text-[#c5834e]" : "text-slate-400"} text-xs`}></i>
+                    <span className="hidden md:inline">{isSyncing ? "جاري التحديث..." : "تحديث فوري"}</span>
+                  </motion.button>
 
-                  <button
-                    onClick={() => setIsLogoutOpen(true)}
+                  <motion.button
+                    whileHover={{ scale: 1.06 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setIsLogoutOpen(true);
+                    }}
                     className="w-9 h-9 rounded-lg border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors cursor-pointer"
                     title="تسجيل الخروج"
                   >
                     <i className="fa-solid fa-power-off text-xs"></i>
-                  </button>
+                  </motion.button>
                 </div>
               </div>
             </header>
@@ -948,8 +1145,12 @@ export default function App() {
               className="lg:hidden bg-white/95 dark:bg-[#0d121f]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 py-2 sticky top-16 z-20 transition-colors duration-200 shadow-xs"
             >
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth touch-pan-x py-0.5">
-                <button
-                  onClick={() => setActiveTab("pos")}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("pos");
+                  }}
                   className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === "pos"
                       ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
@@ -958,10 +1159,14 @@ export default function App() {
                 >
                   <i className="fa-solid fa-cash-register text-xs"></i>
                   <span>كاشير البيع</span>
-                </button>
+                </motion.button>
 
-                <button
-                  onClick={() => setActiveTab("orders")}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("orders");
+                  }}
                   className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === "orders"
                       ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
@@ -979,10 +1184,14 @@ export default function App() {
                   >
                     {orders.length}
                   </span>
-                </button>
+                </motion.button>
 
-                <button
-                  onClick={() => setActiveTab("inventory")}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("inventory");
+                  }}
                   className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === "inventory"
                       ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
@@ -1000,10 +1209,14 @@ export default function App() {
                   >
                     {Object.keys(products).length}
                   </span>
-                </button>
+                </motion.button>
 
-                <button
-                  onClick={() => setActiveTab("dashboard")}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("dashboard");
+                  }}
                   className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === "dashboard"
                       ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
@@ -1012,10 +1225,14 @@ export default function App() {
                 >
                   <i className="fa-solid fa-chart-pie text-xs"></i>
                   <span>التقارير</span>
-                </button>
+                </motion.button>
 
-                <button
-                  onClick={() => setActiveTab("debts")}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("debts");
+                  }}
                   className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === "debts"
                       ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
@@ -1033,54 +1250,64 @@ export default function App() {
                   >
                     {debts.length}
                   </span>
-                </button>
+                </motion.button>
               </div>
             </nav>
 
             {/* Main Content Area */}
             <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-7xl mx-auto overflow-y-auto">
-              {activeTab === "pos" && (
-                <PosCashier
-                  products={products}
-                  onOrderCreated={handleOrderCreated}
-                  showToast={showToast}
-                  onOpenPrintModal={(order) => setPrintOrder(order)}
-                />
-              )}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                >
+                  {activeTab === "pos" && (
+                    <PosCashier
+                      products={products}
+                      onOrderCreated={handleOrderCreated}
+                      showToast={showToast}
+                      onOpenPrintModal={(order) => setPrintOrder(order)}
+                    />
+                  )}
 
-              {activeTab === "orders" && (
-                <OrdersList
-                  orders={orders}
-                  onUpdateStatus={handleUpdateOrderStatus}
-                  onTriggerReturn={(invoiceId) => setReturnInvoiceId(invoiceId)}
-                  onOpenPrintModal={(order) => setPrintOrder(order)}
-                />
-              )}
+                  {activeTab === "orders" && (
+                    <OrdersList
+                      orders={orders}
+                      onUpdateStatus={handleUpdateOrderStatus}
+                      onTriggerReturn={(invoiceId) => setReturnInvoiceId(invoiceId)}
+                      onOpenPrintModal={(order) => setPrintOrder(order)}
+                    />
+                  )}
 
-              {activeTab === "inventory" && (
-                <InventoryManager
-                  products={products}
-                  onAddProduct={handleAddProduct}
-                  onUpdateProduct={handleUpdateProduct}
-                  onRestockProduct={handleRestockProduct}
-                  onDeleteProduct={handleDeleteProduct}
-                  onUpdatePrice={handleUpdatePrice}
-                  showToast={showToast}
-                  shopName={shopName}
-                />
-              )}
+                  {activeTab === "inventory" && (
+                    <InventoryManager
+                      products={products}
+                      onAddProduct={handleAddProduct}
+                      onUpdateProduct={handleUpdateProduct}
+                      onRestockProduct={handleRestockProduct}
+                      onDeleteProduct={handleDeleteProduct}
+                      onUpdatePrice={handleUpdatePrice}
+                      showToast={showToast}
+                      shopName={shopName}
+                    />
+                  )}
 
-              {activeTab === "dashboard" && <DashboardReports orders={orders} />}
+                  {activeTab === "dashboard" && <DashboardReports orders={orders} />}
 
-              {activeTab === "debts" && (
-                <DebtsTracker
-                  debts={debts}
-                  onAddOrUpdateDebt={handleAddOrUpdateDebt}
-                  onRecordPayment={handleRecordDebtPayment}
-                  onCloseDebt={handleCloseDebt}
-                  showToast={showToast}
-                />
-              )}
+                  {activeTab === "debts" && (
+                    <DebtsTracker
+                      debts={debts}
+                      onAddOrUpdateDebt={handleAddOrUpdateDebt}
+                      onRecordPayment={handleRecordDebtPayment}
+                      onCloseDebt={handleCloseDebt}
+                      showToast={showToast}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </main>
           </div>
         </div>

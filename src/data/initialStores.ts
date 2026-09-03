@@ -4,8 +4,73 @@ export const DEFAULT_ADMIN_PASSWORD = "rtg@admin2025";
 export const MASTER_SCRIPT_STORAGE_KEY = "rtg_master_cloud_script_url";
 export const ADMIN_PASSWORD_STORAGE_KEY = "rtg_admin_master_password";
 export const SUBSCRIBERS_STORAGE_KEY = "rtg_subscribers_master_list";
+export const SUBSCRIPTION_PLANS_STORAGE_KEY = "rtg_subscription_plans_list";
 
-// Demo Subscribers only loaded on explicit demo request
+import { StoreSubscriber, SubscriptionPlan } from "../types";
+
+export const DEFAULT_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+  {
+    id: "plan-1m",
+    name: "باقة 1 شهر (تجربة سريعة)",
+    months: 1,
+    price: 45,
+    badge: "مرونة شهرية",
+    features: [
+      "نظام كاشير بيع مباشر وفوري",
+      "إدارة المخزون والتنبيه عند نفاد الكميات",
+      "إصدار وطباعة فواتير حرارية وبلوتوث",
+      "مزامنة سحابية مستمرة مع خادمك الخاص",
+      "دعم فني وتحديثات مستمرة",
+    ],
+  },
+  {
+    id: "plan-3m",
+    name: "باقة 3 أشهر (الأكثر طلباً)",
+    months: 3,
+    price: 115,
+    originalPrice: 135,
+    badge: "الأكثر طلباً 🚀",
+    popular: true,
+    features: [
+      "كافة مميزات المنظومة المتكاملة",
+      "إدارة الديون وسجل المرتجعات",
+      "تقارير أرباح ومبيعات ورسوم بيانية",
+      "مزامنة سحابية فائقة السرعة 24/7",
+      "توفير 20 دينار مقارنة بالشهري",
+      "دعم فني ذو أولوية عالية",
+    ],
+  },
+  {
+    id: "plan-6m",
+    name: "باقة 6 أشهر (توفير عالي)",
+    months: 6,
+    price: 210,
+    originalPrice: 270,
+    badge: "توفير 60 د.ل",
+    features: [
+      "كافة مميزات المنظومة بدون أي قيود",
+      "ربط خادم سحابي مستقل مشفر للمتجر",
+      "نسخ احتياطي تلقائي للبيانات وحمايتها",
+      "إمكانية الدخول من أكثر من جهاز في نفس الوقت",
+      "دعم فني مباشر ومساعدة في التهيئة",
+    ],
+  },
+  {
+    id: "plan-12m",
+    name: "باقة سنوية 12 شهر (الأوفر)",
+    months: 12,
+    price: 350,
+    originalPrice: 540,
+    badge: "الأوفر والأفضل قيمة 💎",
+    features: [
+      "اشتراك سنوي كامل بأقل تكلفة شهرية",
+      "تجهيز وربط خادم جوجل شيت مجاناً",
+      "تحديثات حصرية متميزة على مدار العام",
+      "تقارير سنوية شاملة للمبيعات والأرباح",
+      "دعم فني VIP على مدار الساعة 24/7",
+    ],
+  },
+];
 export const DEMO_SUBSCRIBERS: StoreSubscriber[] = [
   {
     id: "STORE-001",
@@ -66,10 +131,35 @@ export function setMasterScriptUrl(url: string): void {
   localStorage.setItem(MASTER_SCRIPT_STORAGE_KEY, url.trim());
 }
 
+export function getSubscriptionPlans(): SubscriptionPlan[] {
+  try {
+    const raw = localStorage.getItem(SUBSCRIPTION_PLANS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error reading subscription plans:", e);
+  }
+  return DEFAULT_SUBSCRIPTION_PLANS;
+}
+
+export function saveSubscriptionPlans(plans: SubscriptionPlan[]): void {
+  try {
+    localStorage.setItem(SUBSCRIPTION_PLANS_STORAGE_KEY, JSON.stringify(plans));
+  } catch (e) {
+    console.error("Error saving subscription plans:", e);
+  }
+}
+
 // Aliases for convenience
 export const loadSubscribers = getSavedSubscribers;
 export const loadAdminPassword = getAdminPassword;
 export const saveAdminPassword = setAdminPassword;
 export const loadMasterScriptUrl = getMasterScriptUrl;
 export const saveMasterScriptUrl = setMasterScriptUrl;
+export const loadSubscriptionPlans = getSubscriptionPlans;
+
 

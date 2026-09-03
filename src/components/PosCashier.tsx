@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { ProductsMap, CartItem, Order } from "../types";
+import { soundFx } from "../services/soundEffects";
+import { motion, AnimatePresence } from "motion/react";
 
 interface PosCashierProps {
   products: ProductsMap;
@@ -28,9 +30,12 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const addToCart = (barcode: string) => {
     const prod = products[barcode];
     if (!prod || prod.qty <= 0) {
+      soundFx.playWarning();
       showToast("عذراً، هذا المنتج نفد من المخزن!", "error");
       return;
     }
+
+    soundFx.playBeep();
 
     setCart((prev) => {
       const existing = prev.find((item) => item.code === barcode);
@@ -57,6 +62,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   };
 
   const updateCartQty = (barcode: string, newQty: number) => {
+    soundFx.playClick();
     const prod = products[barcode];
     if (newQty <= 0) {
       setCart((prev) => prev.filter((item) => item.code !== barcode));
@@ -77,6 +83,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   };
 
   const clearCart = () => {
+    soundFx.playWarning();
     setCart([]);
     setCustomerName("");
     setCustomerPhone("");
@@ -95,9 +102,12 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
   const handleSubmitOrder = () => {
     if (cart.length === 0) {
+      soundFx.playWarning();
       showToast("السلة فارغة! أضف منتجاً أولاً للمتابعة", "error");
       return;
     }
+
+    soundFx.playCashRegister();
 
     let netProfit = 0;
     const parts: string[] = [];
@@ -110,7 +120,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     const invoiceId = "INV-" + Date.now().toString().slice(-6);
     const dateStr = new Date().toLocaleString("ar-LY", { hour12: false });
 
-    // Update inventory stocks
+    // Update inventory stocks immediately
     const updatedProducts: ProductsMap = { ...products };
     cart.forEach((item) => {
       if (updatedProducts[item.code]) {
@@ -152,11 +162,11 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   });
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 animate-fadeInUp">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
       {/* Products Catalog Section */}
       <div className="lg:col-span-7 space-y-3">
         {/* Search Header */}
-        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-2">
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-2">
           <div className="relative flex-1">
             <i className="fa-solid fa-magnifying-glass text-slate-400 absolute right-3.5 top-3 text-xs"></i>
             <input
@@ -164,13 +174,13 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ابحث باسم السلعة أو الباركود..."
-              className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] transition-colors"
+              className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] transition-colors"
             />
           </div>
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+              className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl cursor-pointer transition-colors"
             >
               مسح
             </button>
@@ -180,7 +190,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         {/* Products Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto max-h-[58vh] lg:max-h-[72vh] p-0.5">
           {productKeys.length === 0 ? (
-            <div className="col-span-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-center py-14 text-slate-400 text-xs">
+            <div className="col-span-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-center py-14 text-slate-400 text-xs">
               <i className="fa-solid fa-box-open text-4xl mb-2 block opacity-30"></i>
               لا توجد منتجات مطابقة لعملية البحث
             </div>
@@ -191,13 +201,15 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               const outOfStock = prod.qty <= 0;
 
               return (
-                <div
+                <motion.div
                   key={barcode}
+                  whileHover={!outOfStock ? { scale: 1.02, y: -2 } : {}}
+                  whileTap={!outOfStock ? { scale: 0.98 } : {}}
                   onClick={() => !outOfStock && addToCart(barcode)}
-                  className={`p-3 rounded-xl border transition-all text-right relative flex flex-col justify-between h-28 select-none ${
+                  className={`p-3 rounded-2xl border transition-all text-right relative flex flex-col justify-between h-28 select-none shadow-xs ${
                     outOfStock
                       ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed"
-                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-[#c5834e] dark:hover:border-[#c5834e] hover:shadow-sm cursor-pointer card-hover active:scale-[0.98]"
+                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-[#c5834e] dark:hover:border-[#c5834e] cursor-pointer"
                   }`}
                 >
                   <div>
@@ -223,7 +235,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                       {outOfStock ? "نفد" : `${prod.qty} بالمخزن`}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               );
             })
           )}
@@ -231,13 +243,12 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       </div>
 
       {/* Cart & Customer Section */}
-      <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col justify-between space-y-4">
+      <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col justify-between space-y-4">
         <div>
           {/* Cart Header */}
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
             <span className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <i className="fa-solid fa-basket-shopping text-[#c5834e]"></i> سلة التجهيز الحالية (
-              {cart.length})
+              <i className="fa-solid fa-basket-shopping text-[#c5834e]"></i> سلة التجهيز الحالية ({cart.length})
             </span>
             {cart.length > 0 && (
               <button
@@ -249,7 +260,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
             )}
           </div>
 
-          {/* Cart items list */}
+          {/* Cart items list with AnimatePresence */}
           <div className="space-y-2 overflow-y-auto max-h-[22vh] lg:max-h-[26vh] pr-0.5">
             {cart.length === 0 ? (
               <div className="text-center text-slate-400 text-xs py-8">
@@ -257,168 +268,147 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 السلة فارغة، اضغط على أي سلعة لإضافتها
               </div>
             ) : (
-              cart.map((item) => (
-                <div
-                  key={item.code}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 flex items-center justify-between gap-2 text-right"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{item.name}</h5>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-[#c5834e] dark:text-[#e0a36e] font-bold font-mono">
-                        {(item.price * item.qty).toFixed(2)} د.ل
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        ({item.price.toFixed(2)} للقطعة)
-                      </span>
+              <AnimatePresence>
+                {cart.map((item) => (
+                  <motion.div
+                    key={item.code}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs"
+                  >
+                    <div className="flex-1 text-right pl-2">
+                      <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{item.name}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                        {item.price.toFixed(2)} د.ل × {item.qty} ={" "}
+                        <strong className="text-[#c5834e] dark:text-[#e0a36e]">
+                          {(item.price * item.qty).toFixed(2)} د.ل
+                        </strong>
+                      </p>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
-                    <button
-                      onClick={() => updateCartQty(item.code, item.qty - 1)}
-                      className="w-5 h-5 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      value={item.qty}
-                      onChange={(e) => updateCartQty(item.code, parseInt(e.target.value) || 0)}
-                      className="w-8 text-center text-xs font-bold outline-none border-none text-slate-900 dark:text-white bg-transparent"
-                    />
-                    <button
-                      onClick={() => updateCartQty(item.code, item.qty + 1)}
-                      className="w-5 h-5 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              ))
+                    <div className="flex items-center gap-1.5">
+                      <motion.button
+                        whileTap={{ scale: 0.85 }}
+                        onClick={() => updateCartQty(item.code, item.qty - 1)}
+                        className="w-6 h-6 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-500/20 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center cursor-pointer"
+                      >
+                        -
+                      </motion.button>
+                      <span className="font-bold font-mono text-xs w-5 text-center text-slate-900 dark:text-white">
+                        {item.qty}
+                      </span>
+                      <motion.button
+                        whileTap={{ scale: 0.85 }}
+                        onClick={() => updateCartQty(item.code, item.qty + 1)}
+                        className="w-6 h-6 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-[#c5834e]/20 hover:text-[#c5834e] text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center cursor-pointer"
+                      >
+                        +
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             )}
           </div>
-        </div>
 
-        {/* Customer & Payment Form */}
-        <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2.5 text-right">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">اسم الزبون</label>
+          {/* Customer & Order Metadata Form */}
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="اسم الزبون"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
+                placeholder="اسم الزبون (اختياري)..."
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
               />
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">رقم الهاتف</label>
               <input
-                type="tel"
+                type="text"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="091XXXXXXX"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
+                placeholder="رقم الهاتف..."
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] font-mono text-right"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">هاتف احتياطي</label>
-              <input
-                type="tel"
-                value={customerBackupPhone}
-                onChange={(e) => setCustomerBackupPhone(e.target.value)}
-                placeholder="اختياري"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">منطقة التوصيل</label>
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
                 value={customerArea}
                 onChange={(e) => setCustomerArea(e.target.value)}
-                placeholder="المدينة / المنطقة"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
+                placeholder="المنطقة أو العنوان..."
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">طريقة الدفع</label>
               <select
                 value={payMethod}
                 onChange={(e) => setPayMethod(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e]"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
               >
-                <option value="كاش">كاش (نقدي)</option>
+                <option value="كاش">كاش نقدي</option>
                 <option value="مصراتي">خدمة مصراتي</option>
                 <option value="سداد">خدمة سداد</option>
                 <option value="تداول">خدمة تداول</option>
                 <option value="بطاقة">بطاقة مصرفية</option>
               </select>
             </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">رسوم التوصيل (د.ل)</label>
-              <input
-                type="number"
-                min="0"
-                value={deliveryFee || ""}
-                onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)}
-                placeholder="0"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] text-center font-bold"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">قيمة الخصم (د.ل)</label>
-              <input
-                type="number"
-                min="0"
-                value={discountAmount || ""}
-                onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                placeholder="0"
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-amber-600 dark:text-amber-400 rounded-lg outline-none focus:border-amber-500 text-center font-bold"
-              />
-            </div>
-            {payMethod === "كاش" && (
+            <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-[10px] text-slate-500 font-bold mb-1">المبلغ المستلم</label>
+                <label className="block text-[10px] text-slate-500 font-bold mb-1">رسوم التوصيل</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={deliveryFee || ""}
+                  onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] text-center font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 font-bold mb-1">الخصم (د.ل)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={discountAmount || ""}
+                  onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-amber-600 dark:text-amber-400 rounded-xl outline-none focus:border-amber-500 text-center font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 font-bold mb-1">المستلم (كاش)</label>
                 <input
                   type="number"
                   min="0"
                   value={paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value)}
                   placeholder="0"
-                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg outline-none focus:border-[#c5834e] text-center font-bold"
+                  className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] text-center font-bold"
                 />
               </div>
+            </div>
+
+            {payMethod === "كاش" && parsedPaid > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2 flex justify-between items-center"
+              >
+                <span className="text-xs text-emerald-800 dark:text-emerald-300 font-bold">الباقي للزبون:</span>
+                <span
+                  className={`text-sm font-black font-mono ${
+                    change >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"
+                  }`}
+                >
+                  {change.toFixed(2)} د.ل
+                </span>
+              </motion.div>
             )}
           </div>
-
-          {payMethod === "كاش" && parsedPaid > 0 && (
-            <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg px-3 py-2 flex justify-between items-center animate-fadeInUp">
-              <span className="text-xs text-emerald-800 dark:text-emerald-300 font-bold">الباقي للزبون:</span>
-              <span
-                className={`text-sm font-black font-mono ${
-                  change >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"
-                }`}
-              >
-                {change.toFixed(2)} د.ل
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Totals & Submit */}
-        <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl space-y-2 border border-slate-200 dark:border-slate-800 text-right">
+        <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl space-y-2 border border-slate-200 dark:border-slate-800 text-right">
           <div className="flex justify-between text-xs font-medium text-slate-500">
             <span>إجمالي السلع:</span>
             <span className="text-slate-800 dark:text-white font-mono">{cartSubtotal.toFixed(2)} د.ل</span>
@@ -439,12 +429,14 @@ export const PosCashier: React.FC<PosCashierProps> = ({
             <span>صافي المطلوب:</span>
             <span className="text-[#c5834e] dark:text-[#e0a36e] text-base font-black font-mono">{cartTotal.toFixed(2)} د.ل</span>
           </div>
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
             onClick={handleSubmitOrder}
-            className="w-full btn-brand-bronze font-bold py-2.5 rounded-lg shadow-sm text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer mt-1"
+            className="w-full btn-brand-bronze font-bold py-3 rounded-xl shadow-lg shadow-[#c5834e]/20 text-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
           >
             <i className="fa-solid fa-circle-check"></i> تأكيد وحفظ الفاتورة
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>

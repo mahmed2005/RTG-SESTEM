@@ -5,13 +5,13 @@ import {
   MASTER_SUBSCRIPTIONS_SCRIPT_CODE,
   STORE_ENGINE_SCRIPT_CODE,
 } from "../data/appsScriptTemplates";
-import { cloudGetSubscribers } from "../services/cloudService";
+import { cloudGetSubscribers, normalizeScriptUrl } from "../services/cloudService";
 
 interface AdminDashboardProps {
   subscribers: StoreSubscriber[];
   onAddSubscriber: (sub: StoreSubscriber) => void;
   onUpdateSubscriber: (id: string, sub: StoreSubscriber) => void;
-  onDeleteSubscriber: (id: string) => void;
+  onDeleteSubscriber: (id: string, storeCode?: string, username?: string) => void;
   onSyncSubscribers?: (subs: StoreSubscriber[]) => void;
   onLoginAsStore: (sub: StoreSubscriber) => void;
   onClose: () => void;
@@ -210,6 +210,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    const { url: cleanCloudUrl, warning } = normalizeScriptUrl(newCloudUrl.trim());
+    if (warning) {
+      showToast(warning, "error", 8000);
+    }
+
     const newSub: StoreSubscriber = {
       id: `STORE-${Date.now().toString().slice(-5)}`,
       storeCode: cleanCode,
@@ -217,7 +222,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       password: newPassword.trim() || "123456",
       storeName: newStoreName.trim(),
       phone: newPhone.trim(),
-      cloudUrl: newCloudUrl.trim(),
+      cloudUrl: cleanCloudUrl,
       startDate: newStartDate,
       endDate: newEndDate,
       plan: newPlan,
@@ -239,7 +244,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!editingStore) return;
 
-    onUpdateSubscriber(editingStore.id, editingStore);
+    const { url: cleanCloudUrl, warning } = normalizeScriptUrl(editingStore.cloudUrl || "");
+    if (warning) {
+      showToast(warning, "error", 8000);
+    }
+
+    const updatedSub: StoreSubscriber = {
+      ...editingStore,
+      storeCode: editingStore.storeCode.trim().toUpperCase(),
+      cloudUrl: cleanCloudUrl,
+    };
+
+    onUpdateSubscriber(editingStore.id, updatedSub);
     setEditingStore(null);
     showToast(`✓ تم تحديث بيانات "${editingStore.storeName}" بنجاح`, "success");
   };
@@ -1463,18 +1479,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <h3 className="text-sm font-bold text-white">تأكيد حذف المتجر؟</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              هل أنت متأكد من رغبتك في إزالة هذا المتجر نهائياً من سجل المشتركين؟ لن يتمكن من تسجيل الدخول بعد الآن.
+              هل أنت متأكد من رغبتك في إزالة هذا المتجر نهائياً من سجل المشتركين؟ لن يتمكن من تسجيل الدخول بعد الآن وسيتم حذفه من ملف جوجل شيت الرئيسي.
             </p>
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 onClick={() => {
-                  onDeleteSubscriber(deleteConfirmId);
+                  const targetSub = subscribers.find((s) => s.id === deleteConfirmId);
+                  onDeleteSubscriber(deleteConfirmId, targetSub?.storeCode, targetSub?.username);
                   setDeleteConfirmId(null);
-                  showToast("تم حذف المتجر بنجاح", "info");
+                  showToast("تم حذف المتجر بنجاح من المنظومة وقاعدة البيانات", "info");
                 }}
                 className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 rounded-xl text-xs cursor-pointer shadow-md"
               >
-                نعم، احذف
+                نعم، احذف نهائياً
               </button>
               <button
                 onClick={() => setDeleteConfirmId(null)}

@@ -66,8 +66,30 @@ export interface StoreSubscriber {
   cloudUrl: string;
   startDate: string;
   endDate: string;
-  plan: "تجريبي" | "شهري" | "سنوي" | "دائم VIP";
+  plan: "تجريبي" | "شهري" | "سنوي" | "دائم VIP" | string;
   status: "نشط" | "منتهي الصلاحية" | "معلق";
   notes?: string;
   createdAt?: string;
 }
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  months: number;
+  price: number;
+  originalPrice?: number;
+  badge?: string;
+  popular?: boolean;
+  features: string[];
+  description?: string;
+}
+
+export interface MasterSettings {
+  masterCloudUrl: string;
+  adminPassword: string;
+  systemName: string;
+  supportPhone: string;
+  updatedAt?: string;
+  subscriptionPlans?: SubscriptionPlan[];
+}
+

@@ -6,14 +6,43 @@
 import { Debt, Order, Product, ProductsMap, StoreSubscriber } from "../types";
 
 /**
+ * Sanitize and normalize Google Apps Script Web App URLs
+ * Converts /edit or /dev to /exec, strips trailing spaces/quotes, and validates format.
+ */
+export function normalizeScriptUrl(rawUrl: string): { url: string; warning?: string } {
+  if (!rawUrl) return { url: "" };
+  let url = rawUrl.trim().replace(/^["']|["']$/g, "").trim();
+
+  // Check if user accidentally pasted a Google Sheets spreadsheet URL
+  if (url.includes("docs.google.com/spreadsheets")) {
+    return {
+      url,
+      warning:
+        "تنبيه: لقد قمت بلصق رابط ملف جوجل شيت وليس رابط تطبيق الويب (Web App URL). يرجى نسخ الرابط من: نشر (Deploy) -> تطبيق ويب (Web app).",
+    };
+  }
+
+  // If it's a script.google.com macros link, ensure it points to /exec
+  if (url.includes("script.google.com/macros/s/")) {
+    url = url.replace(/\/edit(#.*)?$/, "/exec").replace(/\/dev(#.*)?$/, "/exec");
+    if (!url.includes("/exec")) {
+      url = url.replace(/\/?$/, "/exec");
+    }
+  }
+
+  return { url };
+}
+
+/**
  * Send an action payload to Apps Script (via POST with fallback)
  */
 export async function sendCloudAction(url: string, payload: Record<string, any>): Promise<boolean> {
-  if (!url || !url.startsWith("http")) return false;
+  const { url: cleanUrl } = normalizeScriptUrl(url);
+  if (!cleanUrl || !cleanUrl.startsWith("http")) return false;
 
   try {
     // 1. Primary: POST request with text/plain to avoid CORS preflight rejection
-    await fetch(url, {
+    await fetch(cleanUrl, {
       method: "POST",
       mode: "no-cors",
       headers: {
@@ -23,11 +52,9 @@ export async function sendCloudAction(url: string, payload: Record<string, any>)
     });
     return true;
   } catch (err) {
-    console.warn("sendCloudAction POST failed, trying GET fallback:", err);
-
     // 2. Secondary fallback: GET request with parameters (for simple payloads)
     try {
-      const u = new URL(url);
+      const u = new URL(cleanUrl);
       u.searchParams.set("action", payload.action || "");
       if (payload.barcode) u.searchParams.set("barcode", payload.barcode);
       if (payload.storeCode) u.searchParams.set("storeCode", payload.storeCode);
@@ -51,9 +78,10 @@ export async function fetchCloudData<T>(
   action: string,
   params: Record<string, string> = {}
 ): Promise<T | null> {
-  if (!url || !url.startsWith("http")) return null;
+  const { url: cleanUrl } = normalizeScriptUrl(url);
+  if (!cleanUrl || !cleanUrl.startsWith("http")) return null;
 
-  const urlObj = new URL(url);
+  const urlObj = new URL(cleanUrl);
   urlObj.searchParams.set("action", action);
   Object.entries(params).forEach(([k, v]) => urlObj.searchParams.set(k, v));
   urlObj.searchParams.set("_t", Date.now().toString());
@@ -64,12 +92,13 @@ export async function fetchCloudData<T>(
       method: "GET",
       redirect: "follow",
     });
-    if (res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (res.ok && contentType.includes("application/json")) {
       const data = await res.json();
       return data as T;
     }
-  } catch (e) {
-    console.warn("Direct fetch prevented by browser redirect/CORS, using JSONP fallback:", e);
+  } catch {
+    // Direct fetch prevented or returned redirect/CORS, proceed smoothly to JSONP fallback
   }
 
   // 2. Guaranteed JSONP fallback
@@ -79,6 +108,7 @@ export async function fetchCloudData<T>(
 
     const script = document.createElement("script");
     script.src = urlObj.toString();
+    script.async = true;
 
     let finished = false;
     const timer = setTimeout(() => {
@@ -317,11 +347,13 @@ export async function cloudSaveSubscriber(
 export async function cloudDeleteSubscriber(
   masterScriptUrl: string,
   storeCode: string,
-  id?: string
+  id?: string,
+  username?: string
 ): Promise<void> {
   await sendCloudAction(masterScriptUrl, {
     action: "deleteStore",
     storeCode,
     id,
+    username,
   });
 }
