@@ -361,6 +361,27 @@ input[type="number"]::-webkit-outer-spin-button {
     margin: 4mm;
     size: auto;
   }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  /* Remove overlay dark backgrounds and modal constraints when printing */
+  .fixed, [class*="backdrop-blur"] {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    position: static !important;
+    inset: auto !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
   body * {
     visibility: hidden !important;
   }
@@ -377,7 +398,7 @@ input[type="number"]::-webkit-outer-spin-button {
     max-width: 100% !important;
     background: white !important;
     color: black !important;
-    padding: 8px !important;
+    padding: 4mm !important;
     border: none !important;
     box-shadow: none !important;
   }

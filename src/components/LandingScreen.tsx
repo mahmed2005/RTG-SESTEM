@@ -3,7 +3,7 @@ import { RtgLogo } from "./RtgLogo";
 import { soundFx } from "../services/soundEffects";
 import { motion, AnimatePresence } from "motion/react";
 import { SubscriptionPlan } from "../types";
-import { DEFAULT_SUBSCRIPTION_PLANS } from "../data/initialStores";
+import { DEFAULT_SUBSCRIPTION_PLANS, getSocialLinks, SocialLinks } from "../data/initialStores";
 
 interface LandingScreenProps {
   onOpenLogin: () => void;
@@ -21,6 +21,12 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   subscriptionPlans = DEFAULT_SUBSCRIPTION_PLANS,
 }) => {
   const [isPlansModalOpen, setIsPlansModalOpen] = useState(false);
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>(() => getSocialLinks());
+
+  // Reload social links when modal or state changes
+  useEffect(() => {
+    setSocialLinks(getSocialLinks());
+  }, [isPlansModalOpen]);
 
   // Active plans list to display
   const activePlans = subscriptionPlans && subscriptionPlans.length > 0
@@ -64,9 +70,16 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           className="text-center flex flex-col items-center w-full"
         >
           <RtgLogo size="full" />
-          <p className="text-[11px] text-slate-400 mt-3 font-mono tracking-widest uppercase">
-            PROFESSIONAL POINT OF SALE & INVENTORY SYSTEM
-          </p>
+          <div className="mt-3.5 space-y-1">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-200 font-['IBM_Plex_Sans_Arabic','Cairo',sans-serif] tracking-normal flex items-center justify-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#c57b42]"></span>
+              منظومة متكاملة لمتجرك الإلكتروني
+              <span className="w-1.5 h-1.5 rounded-full bg-[#c57b42]"></span>
+            </h2>
+            <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">
+              PROFESSIONAL POINT OF SALE & INVENTORY SYSTEM
+            </p>
+          </div>
         </motion.div>
 
         {/* Short Summary */}
@@ -76,7 +89,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           transition={{ delay: 0.15, duration: 0.4 }}
           className="text-center"
         >
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-sm mx-auto">
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-sm mx-auto font-['IBM_Plex_Sans_Arabic','Tajawal',sans-serif]">
             منظومة متكاملة وسلسة لإدارة متجرك ومبيعاتك — كاشير سريع، جرد لحظي، فواتير مميزة، ومزامنة سحابية فائقة السرعة مع جوجل شيت.
           </p>
         </motion.div>
@@ -183,53 +196,51 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           </motion.button>
         </motion.div>
 
-        {/* Subscription Plans */}
+        {/* Modern Interactive Square Button for Plans */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.4 }}
-          className="w-full space-y-2.5"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28, duration: 0.4 }}
+          className="w-full"
         >
-          <h3 className="text-sm font-bold text-slate-200 text-center flex items-center justify-center gap-2">
-            <i className="fa-solid fa-crown text-[#c57b42]"></i> باقات الاشتراك
-          </h3>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-[#181c22] border border-emerald-500/30 rounded-2xl p-3 text-center space-y-1">
-              <div className="text-xl">⚡</div>
-              <p className="text-[11px] font-bold text-emerald-400">1 شهر</p>
-              <p className="text-xs font-black text-white">45 د.ل</p>
-              <p className="text-[9px] text-slate-400">مرونة شهرية</p>
-            </div>
-            <div className="bg-[#181c22] border border-[#c57b42]/60 rounded-2xl p-3 text-center space-y-1 relative shadow-lg shadow-[#c57b42]/10">
-              <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-[#c57b42] text-white text-[8px] font-bold px-2 py-0.5 rounded-full shadow">
-                الأكثر طلباً
-              </div>
-              <div className="text-xl">🚀</div>
-              <p className="text-[11px] font-bold text-[#c57b42]">3 أشهر</p>
-              <p className="text-xs font-black text-white">115 د.ل</p>
-              <p className="text-[9px] text-slate-400">وفر 20 د.ل</p>
-            </div>
-            <div className="bg-[#181c22] border border-amber-500/30 rounded-2xl p-3 text-center space-y-1">
-              <div className="text-xl">💎</div>
-              <p className="text-[11px] font-bold text-amber-400">سنوي</p>
-              <p className="text-xs font-black text-white">350 د.ل</p>
-              <p className="text-[9px] text-slate-400">الأوفر قيمة</p>
-            </div>
-          </div>
-
-          {/* Button to show full subscription plans details */}
           <motion.button
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => {
               soundFx.playClick();
               setIsPlansModalOpen(true);
             }}
-            className="w-full py-2.5 px-3 bg-gradient-to-r from-[#1f232b] via-[#262b35] to-[#1f232b] hover:from-[#262b35] hover:to-[#313744] text-[#e0a36e] border border-[#c57b42]/40 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            className="w-full group relative overflow-hidden bg-gradient-to-br from-[#181c22] via-[#202530] to-[#151921] border-2 border-[#c57b42]/50 hover:border-[#c57b42] rounded-2xl p-4 shadow-xl shadow-black/40 transition-all text-right cursor-pointer"
           >
-            <i className="fa-solid fa-gem text-[#c57b42]"></i>
-            <span>عرض تفاصيل وباقات الاشتراكات الشهرية كاملة</span>
-            <i className="fa-solid fa-arrow-left text-[10px] text-slate-400"></i>
+            {/* Ambient subtle glow */}
+            <div className="absolute -top-10 -left-10 w-28 h-28 bg-[#c57b42]/15 rounded-full blur-xl pointer-events-none group-hover:bg-[#c57b42]/25 transition-all"></div>
+
+            <div className="flex items-center justify-between gap-3 relative z-10">
+              <div className="flex items-center gap-3.5">
+                {/* Square Accent Icon Box */}
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#c57b42] to-[#8f5223] text-white flex items-center justify-center text-xl shadow-lg shadow-[#c57b42]/30 shrink-0 border border-[#e0a36e]/40 group-hover:rotate-3 transition-transform">
+                  <i className="fa-solid fa-crown"></i>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-black text-white group-hover:text-[#e0a36e] transition-colors">
+                      باقات واشتراكات المنظومة
+                    </h4>
+                    <span className="text-[10px] bg-[#c57b42]/20 text-[#e0a36e] border border-[#c57b42]/40 px-2 py-0.5 rounded-md font-bold">
+                      {activePlans.length} باقات مفعّلة
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    اضغط هنا لاستعراض تفاصيل وأسعار الباقات المحددة من الإدارة
+                  </p>
+                </div>
+              </div>
+
+              {/* Arrow Indicator Button */}
+              <div className="w-9 h-9 rounded-xl bg-[#29303e] text-[#e0a36e] group-hover:bg-[#c57b42] group-hover:text-white flex items-center justify-center text-xs transition-all shadow-inner shrink-0">
+                <i className="fa-solid fa-arrow-left"></i>
+              </div>
+            </div>
           </motion.button>
         </motion.div>
 
@@ -263,53 +274,60 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             <i className="fa-solid fa-link text-[#c57b42]"></i> تواصل معنا
           </h3>
           <div className="flex justify-center gap-3">
+            {/* WhatsApp - Genuine Brand Color #25D366 */}
             <motion.a
               whileHover={{ scale: 1.15 }}
               whileTap={{ scale: 0.9 }}
-              href="https://wa.me/218934590635"
+              href={socialLinks.whatsapp || "https://wa.me/218934590635"}
               target="_blank"
               rel="noreferrer"
-              className="social-btn w-11 h-11 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-white text-lg shadow-lg shadow-emerald-500/20"
+              className="social-btn w-11 h-11 rounded-full bg-[#25D366] hover:bg-[#20ba59] flex items-center justify-center text-white text-lg shadow-lg shadow-[#25D366]/30 transition-transform cursor-pointer"
               title="واتساب"
             >
               <i className="fa-brands fa-whatsapp"></i>
             </motion.a>
+
+            {/* Instagram - Genuine Brand Vibrant Gradient */}
             <motion.a
               whileHover={{ scale: 1.15 }}
               whileTap={{ scale: 0.9 }}
-              href="https://www.instagram.com/rtg_gearx?igsh=Y3JreTg0eTAzbmw0"
+              href={socialLinks.instagram || "https://instagram.com"}
               target="_blank"
               rel="noreferrer"
-              className="social-btn w-11 h-11 rounded-full bg-[#1f232b] hover:bg-[#262b35] flex items-center justify-center text-white text-lg shadow-lg border border-slate-700 hover:border-[#c57b42]/50 hover:text-[#c57b42] transition-colors"
-              title="انستقرام"
+              className="social-btn w-11 h-11 rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] hover:opacity-95 flex items-center justify-center text-white text-lg shadow-lg shadow-[#dc2743]/30 transition-transform cursor-pointer"
+              title="إنستغرام"
             >
               <i className="fa-brands fa-instagram"></i>
             </motion.a>
+
+            {/* TikTok - Genuine Brand Black with Contrast Glow */}
             <motion.a
               whileHover={{ scale: 1.15 }}
               whileTap={{ scale: 0.9 }}
-              href="https://www.tiktok.com/@rtg_gearx"
+              href={socialLinks.tiktok || "https://tiktok.com"}
               target="_blank"
               rel="noreferrer"
-              className="social-btn w-11 h-11 rounded-full bg-[#1f232b] hover:bg-[#262b35] flex items-center justify-center text-white text-lg shadow-lg border border-slate-700 hover:border-[#c57b42]/50 hover:text-[#c57b42] transition-colors"
+              className="social-btn w-11 h-11 rounded-full bg-black border border-slate-700 hover:border-[#00f2fe] flex items-center justify-center text-white text-lg shadow-lg shadow-black/50 transition-all cursor-pointer"
               title="تيك توك"
             >
               <i className="fa-brands fa-tiktok"></i>
             </motion.a>
+
+            {/* Facebook - Genuine Brand Color #1877F2 */}
             <motion.a
               whileHover={{ scale: 1.15 }}
               whileTap={{ scale: 0.9 }}
-              href="https://www.facebook.com/profile.php?id=100063457567880"
+              href={socialLinks.facebook || "https://www.facebook.com/profile.php?id=100063457567880"}
               target="_blank"
               rel="noreferrer"
-              className="social-btn w-11 h-11 rounded-full bg-[#1f232b] hover:bg-[#262b35] flex items-center justify-center text-white text-lg shadow-lg border border-slate-700 hover:border-[#c57b42]/50 hover:text-[#c57b42] transition-colors"
+              className="social-btn w-11 h-11 rounded-full bg-[#1877F2] hover:bg-[#166fe5] flex items-center justify-center text-white text-lg shadow-lg shadow-[#1877F2]/30 transition-transform cursor-pointer"
               title="فيسبوك"
             >
               <i className="fa-brands fa-facebook-f"></i>
             </motion.a>
           </div>
           <p className="text-center text-[10px] text-slate-400">
-            واتساب: <span className="font-mono text-emerald-400 font-bold">0934590635</span> — دعم فني متواصل
+            واتساب: <span className="font-mono text-emerald-400 font-bold">{socialLinks.whatsappPhone || "0934590635"}</span> — دعم فني متواصل
           </p>
         </div>
 

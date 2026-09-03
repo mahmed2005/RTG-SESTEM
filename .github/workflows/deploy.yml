@@ -26,18 +26,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
 
       - name: Install dependencies
         run: npm install
 
       - name: Build production bundle
         run: |
-          # Automatically detect repository name for GitHub Pages path
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          echo "Building for GitHub Pages repository: $REPO_NAME"
-          export BASE_URL="/$REPO_NAME/"
           npm run build
           # Ensure SPA routing works for any direct link
           cp dist/index.html dist/404.html

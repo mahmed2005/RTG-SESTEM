@@ -215,24 +215,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         {/* Store Code or Username */}
         <div className="space-y-1 text-right">
-          <label className="text-[11px] font-bold text-slate-400">
-            كود المتجر أو اسم المستخدم *
+          <label className="text-xs font-bold text-slate-300">
+            اسم المستخدم أو كود المتجر
           </label>
           <div className="relative">
-            <i className="fa-solid fa-store text-slate-500 absolute right-3.5 top-3.5 text-sm"></i>
+            <i className="fa-solid fa-user text-slate-500 absolute right-3.5 top-3.5 text-sm"></i>
             <input
               type="text"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="مثال: RTG-8821 أو store1"
-              className="w-full pr-10 pl-4 py-3 bg-[#0d111a] border border-slate-700 rounded-xl text-right font-mono text-white focus:border-[#c5834e] outline-none text-xs transition-all"
+              placeholder="أدخل اسم المستخدم أو كود المتجر"
+              className="w-full pr-10 pl-4 py-3 bg-[#0d111a] border border-slate-700 rounded-xl text-right font-medium text-white focus:border-[#c5834e] outline-none text-xs transition-all"
             />
           </div>
         </div>
 
         {/* Password */}
         <div className="space-y-1 text-right">
-          <label className="text-[11px] font-bold text-slate-400">
+          <label className="text-xs font-bold text-slate-300">
             كلمة المرور
           </label>
           <div className="relative">
@@ -242,8 +242,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              placeholder="كلمة المرور الخاصة بحساب المتجر"
-              className="w-full pr-10 pl-10 py-3 bg-[#0d111a] border border-slate-700 rounded-xl text-right font-mono text-white focus:border-[#c5834e] outline-none text-xs transition-all"
+              placeholder="أدخل كلمة المرور"
+              className="w-full pr-10 pl-10 py-3 bg-[#0d111a] border border-slate-700 rounded-xl text-right font-medium text-white focus:border-[#c5834e] outline-none text-xs transition-all"
             />
             <button
               type="button"

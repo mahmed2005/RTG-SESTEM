@@ -20,7 +20,15 @@ import {
   saveSubscriptionPlans,
   getSystemCode,
   setSystemCode,
+  getSocialLinks,
+  saveSocialLinks,
+  SocialLinks,
+  DEFAULT_SOCIAL_LINKS,
 } from "../data/initialStores";
+import {
+  cloudSaveSocialLinks,
+  cloudGetSocialLinks,
+} from "../services/cloudService";
 
 interface AdminDashboardProps {
   subscribers: StoreSubscriber[];
@@ -59,8 +67,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onChangeSystemCode,
   showToast,
 }) => {
-  // Navigation tabs inside Admin Panel: Stores, Plans, Settings, Cloud Scripts
-  const [activeAdminTab, setActiveAdminTab] = useState<"stores" | "plans" | "settings" | "cloud">("stores");
+  // Navigation tabs inside Admin Panel: Stores, Plans, Social Links, Settings, Cloud Scripts
+  const [activeAdminTab, setActiveAdminTab] = useState<"stores" | "plans" | "social" | "settings" | "cloud">("stores");
+
+  // Social Media Links state
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>(() => getSocialLinks());
+  const [isSavingSocial, setIsSavingSocial] = useState(false);
+  const [isLoadingSocial, setIsLoadingSocial] = useState(false);
 
   // Search and filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -640,6 +653,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Social Media Links Handlers
+  const handleSaveSocialLinks = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingSocial(true);
+    saveSocialLinks(socialLinks);
+    showToast("✓ تم حفظ روابط التواصل الاجتماعي محلياً بنجاح", "success");
+
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (url) {
+      try {
+        const ok = await cloudSaveSocialLinks(url, socialLinks);
+        if (ok) {
+          showToast("✓ تم مزامنة وحفظ الروابط في جدول جوجل شيت الرئيسي بنجاح!", "success");
+        } else {
+          showToast("تم إرسال التحديث، يرجى فحص ورقة (التواصل_الاجتماعي) بجوجل شيت", "info");
+        }
+      } catch (err) {
+        console.error("Error saving social links to cloud:", err);
+        showToast("فشل الاتصال بجوجل شيت لحفظ روابط التواصل", "error");
+      }
+    }
+    setIsSavingSocial(false);
+  };
+
+  const handleFetchSocialLinks = async () => {
+    const url = masterUrlInput.trim() || masterScriptUrl.trim();
+    if (!url) {
+      showToast("يرجى إدخال رابط الخادم المركزي في تبويب الإعدادات أولاً", "error");
+      return;
+    }
+    setIsLoadingSocial(true);
+    showToast("جاري جلب روابط التواصل من جوجل شيت...", "info");
+    try {
+      const fetched = await cloudGetSocialLinks(url);
+      if (fetched) {
+        setSocialLinks(fetched);
+        saveSocialLinks(fetched);
+        showToast("✓ تم جلب روابط التواصل وتحديثها بنجاح!", "success");
+      } else {
+        showToast("لم يتم العثور على روابط مسبقة في ورقة (التواصل_الاجتماعي)", "info");
+      }
+    } catch {
+      showToast("تعذر جلب الروابط من جوجل شيت", "error");
+    } finally {
+      setIsLoadingSocial(false);
+    }
+  };
+
+  const handleResetSocialDefault = () => {
+    setSocialLinks(DEFAULT_SOCIAL_LINKS);
+    saveSocialLinks(DEFAULT_SOCIAL_LINKS);
+    showToast("تمت استعادة الروابط الافتراضية", "info");
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-[#090d16] text-slate-100 flex flex-col font-['Tajawal',sans-serif] overflow-hidden" dir="rtl">
       {/* ======================= TOP ADMIN BAR ======================= */}
@@ -768,6 +835,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <i className="fa-solid fa-gem text-[#c5834e]"></i>
           <span>باقات وأسعار الاشتراكات ({plans.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab("social")}
+          className={`px-4 py-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeAdminTab === "social"
+              ? "border-[#c5834e] text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <i className="fa-solid fa-share-nodes text-[#c5834e]"></i>
+          <span>روابط التواصل الاجتماعي</span>
         </button>
 
         <button
@@ -1323,7 +1402,307 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: SETTINGS & MASTER CONFIG */}
+        {/* TAB 3: SOCIAL MEDIA LINKS */}
+        {activeAdminTab === "social" && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Header Description Card */}
+            <div className="bg-[#121829] p-5 rounded-2xl border border-slate-800 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#c5834e]/20 to-[#a6632f]/30 border border-[#c5834e]/40 text-[#c5834e] flex items-center justify-center text-lg shadow-sm">
+                    <i className="fa-solid fa-share-nodes"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-white">
+                      إدارة روابط التواصل الاجتماعي الرسمية
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      تظهر هذه الروابط في الواجهة الرئيسية للمنظومة لخدمة المشتركين وزوار الموقع
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleFetchSocialLinks}
+                    disabled={isLoadingSocial}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <i className={`fa-solid fa-arrows-rotate ${isLoadingSocial ? "fa-spin text-[#c5834e]" : ""}`}></i>
+                    <span>جلب من جوجل شيت</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetSocialDefault}
+                    className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    title="استعادة الروابط الافتراضية"
+                  >
+                    استعادة الافتراضي
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-400 leading-relaxed bg-[#090d16] p-3 rounded-xl border border-slate-800/80">
+                <span className="text-[#c5834e] font-bold">ملاحظة:</span> عند تعديل أي رابط والضغط على (حفظ ومزامنة)، سيتم حفظ الروابط وتحديثها فوراً على الشاشة الرئيسية للزوار، كما يتم حفظها في ورقة العمل السحابية <span className="font-mono text-white">(التواصل_الاجتماعي)</span> في جدول شيت الرئيسي.
+              </div>
+            </div>
+
+            {/* Social Links Form */}
+            <form onSubmit={handleSaveSocialLinks} className="space-y-4">
+              {/* WhatsApp */}
+              <div className="bg-[#121829] p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#25D366]/20 text-[#25D366] flex items-center justify-center text-base">
+                      <i className="fa-brands fa-whatsapp"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">واتساب (WhatsApp)</h4>
+                      <p className="text-[10px] text-slate-400">للتواصل المباشر مع الدعم الفني وخدمة العملاء</p>
+                    </div>
+                  </div>
+                  {socialLinks.whatsapp && (
+                    <a
+                      href={socialLinks.whatsapp}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-[#25D366] hover:underline flex items-center gap-1 font-bold"
+                    >
+                      تجربة الرابط <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      رقم هاتف الواتساب
+                    </label>
+                    <input
+                      type="text"
+                      value={socialLinks.whatsappPhone || ""}
+                      onChange={(e) =>
+                        setSocialLinks((prev) => ({ ...prev, whatsappPhone: e.target.value }))
+                      }
+                      placeholder="مثال: 0934590635"
+                      className="w-full px-3 py-2 bg-[#090d16] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#25D366] font-mono text-left"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      رابط المحادثة المباشرة (wa.me)
+                    </label>
+                    <input
+                      type="url"
+                      value={socialLinks.whatsapp || ""}
+                      onChange={(e) =>
+                        setSocialLinks((prev) => ({ ...prev, whatsapp: e.target.value }))
+                      }
+                      placeholder="https://wa.me/218934590635"
+                      className="w-full px-3 py-2 bg-[#090d16] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#25D366] font-mono text-left"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Instagram */}
+              <div className="bg-[#121829] p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#fd5949]/20 to-[#d6249f]/20 text-[#fd5949] flex items-center justify-center text-base">
+                      <i className="fa-brands fa-instagram"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">إنستغرام (Instagram)</h4>
+                      <p className="text-[10px] text-slate-400">حساب المنظومة الرسمي لعرض التحديثات والعروض</p>
+                    </div>
+                  </div>
+                  {socialLinks.instagram && (
+                    <a
+                      href={socialLinks.instagram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-[#fd5949] hover:underline flex items-center gap-1 font-bold"
+                    >
+                      تجربة الرابط <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                    </a>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    رابط الحساب على إنستغرام
+                  </label>
+                  <input
+                    type="url"
+                    value={socialLinks.instagram || ""}
+                    onChange={(e) =>
+                      setSocialLinks((prev) => ({ ...prev, instagram: e.target.value }))
+                    }
+                    placeholder="https://www.instagram.com/rtg_gearx"
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#fd5949] font-mono text-left"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* TikTok */}
+              <div className="bg-[#121829] p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-base">
+                      <i className="fa-brands fa-tiktok"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">تيك توك (TikTok)</h4>
+                      <p className="text-[10px] text-slate-400">شروحات مرئية ودليل استخدام المنظومة بالفيديو</p>
+                    </div>
+                  </div>
+                  {socialLinks.tiktok && (
+                    <a
+                      href={socialLinks.tiktok}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-cyan-400 hover:underline flex items-center gap-1 font-bold"
+                    >
+                      تجربة الرابط <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                    </a>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    رابط الحساب على تيك توك
+                  </label>
+                  <input
+                    type="url"
+                    value={socialLinks.tiktok || ""}
+                    onChange={(e) =>
+                      setSocialLinks((prev) => ({ ...prev, tiktok: e.target.value }))
+                    }
+                    placeholder="https://www.tiktok.com/@rtg_gearx"
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-cyan-400 font-mono text-left"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* Facebook */}
+              <div className="bg-[#121829] p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#1877F2]/20 text-[#1877F2] flex items-center justify-center text-base">
+                      <i className="fa-brands fa-facebook"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">فيسبوك (Facebook)</h4>
+                      <p className="text-[10px] text-slate-400">الصفحة الرسمية للتواصل والإعلانات والأخبار</p>
+                    </div>
+                  </div>
+                  {socialLinks.facebook && (
+                    <a
+                      href={socialLinks.facebook}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-[#1877F2] hover:underline flex items-center gap-1 font-bold"
+                    >
+                      تجربة الرابط <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                    </a>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    رابط الصفحة أو الحساب على فيسبوك
+                  </label>
+                  <input
+                    type="url"
+                    value={socialLinks.facebook || ""}
+                    onChange={(e) =>
+                      setSocialLinks((prev) => ({ ...prev, facebook: e.target.value }))
+                    }
+                    placeholder="https://www.facebook.com/profile.php?id=..."
+                    className="w-full px-3 py-2 bg-[#090d16] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#1877F2] font-mono text-left"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview on Landing Page */}
+              <div className="bg-[#0e1422] p-4 rounded-2xl border border-slate-800/90 space-y-2.5">
+                <span className="text-xs font-bold text-slate-400 flex items-center gap-2">
+                  <i className="fa-solid fa-eye text-[#c5834e]"></i>
+                  معاينة مظهر الأزرار كما تظهر للزوار في أسفل صفحة الدخول:
+                </span>
+                <div className="flex items-center justify-center gap-3 py-3 bg-[#090d16] rounded-xl border border-slate-800">
+                  <a
+                    href={socialLinks.whatsapp}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-[#25D366] hover:bg-[#25D366]/20 transition-all text-lg shadow-sm"
+                    title="واتساب"
+                  >
+                    <i className="fa-brands fa-whatsapp"></i>
+                  </a>
+                  <a
+                    href={socialLinks.instagram}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-[#fd5949] hover:bg-[#fd5949]/20 transition-all text-lg shadow-sm"
+                    title="إنستغرام"
+                  >
+                    <i className="fa-brands fa-instagram"></i>
+                  </a>
+                  <a
+                    href={socialLinks.tiktok}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-cyan-400 hover:bg-cyan-500/20 transition-all text-lg shadow-sm"
+                    title="تيك توك"
+                  >
+                    <i className="fa-brands fa-tiktok"></i>
+                  </a>
+                  <a
+                    href={socialLinks.facebook}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-[#1877F2] hover:bg-[#1877F2]/20 transition-all text-lg shadow-sm"
+                    title="فيسبوك"
+                  >
+                    <i className="fa-brands fa-facebook"></i>
+                  </a>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingSocial}
+                  className="w-full py-3 bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] text-white font-black text-sm rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#c5834e]/20 transition-all disabled:opacity-50"
+                >
+                  {isSavingSocial ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i>
+                      <span>جاري حفظ ومزامنة الروابط السحابية...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-cloud-arrow-up"></i>
+                      <span>حفظ ومزامنة روابط التواصل الاجتماعي</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 4: SETTINGS & MASTER CONFIG */}
         {activeAdminTab === "settings" && (
           <div className="max-w-3xl mx-auto space-y-6">
             {/* 1. MASTER CLOUD SCRIPT & CONNECTION */}

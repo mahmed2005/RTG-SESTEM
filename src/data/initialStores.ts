@@ -187,6 +187,39 @@ export function saveSubscriptionPlans(plans: SubscriptionPlan[]): void {
   }
 }
 
+export interface SocialLinks {
+  whatsapp: string;
+  instagram: string;
+  tiktok: string;
+  facebook: string;
+}
+
+export const SOCIAL_LINKS_STORAGE_KEY = "rtg_social_links";
+export const DEFAULT_SOCIAL_LINKS: SocialLinks = {
+  whatsapp: "https://wa.me/218934590635",
+  instagram: "https://instagram.com",
+  tiktok: "https://tiktok.com",
+  facebook: "https://www.facebook.com/profile.php?id=100063457567880",
+};
+
+export function getSocialLinks(): SocialLinks {
+  try {
+    const raw = safeStorage.getItem(SOCIAL_LINKS_STORAGE_KEY);
+    if (raw) {
+      return { ...DEFAULT_SOCIAL_LINKS, ...JSON.parse(raw) };
+    }
+  } catch {}
+  return DEFAULT_SOCIAL_LINKS;
+}
+
+export function saveSocialLinks(links: SocialLinks): void {
+  try {
+    safeStorage.setItem(SOCIAL_LINKS_STORAGE_KEY, JSON.stringify(links));
+  } catch (e) {
+    console.error("Error saving social links:", e);
+  }
+}
+
 export const SYSTEM_CODE_STORAGE_KEY = "rtg_system_code";
 export const DEFAULT_SYSTEM_CODE = "RTG-SYSTEM-2025";
 export const MASTER_SETTINGS_STORAGE_KEY = "rtg_master_settings";

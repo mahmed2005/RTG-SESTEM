@@ -84,6 +84,148 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     document.body.removeChild(link);
   };
 
+  const exportPDF = () => {
+    soundFx.playSuccess();
+    if (filteredOrders.length === 0) return;
+
+    const printWin = window.open("", "_blank", "width=950,height=850");
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const todayDate = new Date().toLocaleDateString("ar-LY", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    let totalAmount = 0;
+    let totalProfits = 0;
+    let returnsCount = 0;
+
+    const rowsHtml = filteredOrders
+      .map((o) => {
+        const isRet =
+          o.status === "مرتجع" ||
+          o.status === "راجع" ||
+          (o.status || "").includes("رجع") ||
+          (Number(o.profit) === 0 && Boolean(o.returnNote));
+        const profitVal = isRet ? 0 : Number(o.profit) || 0;
+        const totalVal = Number(o.total) || 0;
+        if (isRet) {
+          returnsCount++;
+        } else {
+          totalAmount += totalVal;
+          totalProfits += profitVal;
+        }
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0; ${isRet ? 'background: #fff1f2;' : ''}">
+            <td style="padding: 7px 10px; font-family: monospace; font-weight: bold; color: #a6632f;">${o.id}</td>
+            <td style="padding: 7px 10px; font-size: 11px;">${o.date}</td>
+            <td style="padding: 7px 10px; font-weight: bold;">${o.cName || "زبون نقدي"}</td>
+            <td style="padding: 7px 10px; font-family: monospace;">${o.cPhone || "-"}</td>
+            <td style="padding: 7px 10px;">${o.method}</td>
+            <td style="padding: 7px 10px; text-align: left; font-family: monospace; font-weight: bold;">${totalVal.toFixed(2)} د.ل</td>
+            <td style="padding: 7px 10px; text-align: left; font-family: monospace; color: ${isRet ? '#dc2626' : '#16a34a'}; font-weight: bold;">
+              ${profitVal.toFixed(2)} د.ل
+            </td>
+            <td style="padding: 7px 10px; text-align: center;">
+              <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background: ${isRet ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
+                ${isRet ? 'مرتجع للمخزن (ربح: 0 د.ل)' : o.status || 'مكتملة'}
+              </span>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>كشف فواتير المبيعات - RTG-SYSTEM</title>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;900&family=Tajawal:wght@400;500;700;800&display=swap">
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', 'Tajawal', sans-serif; }
+          body { background: #fff; color: #0f172a; padding: 20px; font-size: 12px; }
+          @page { size: A4 landscape; margin: 10mm; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+          .summary { display: flex; gap: 12px; margin-bottom: 16px; }
+          .stat { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc; text-align: right; flex: 1; }
+          .stat-title { font-size: 10px; color: #64748b; font-weight: bold; }
+          .stat-val { font-size: 16px; font-weight: 900; font-family: monospace; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; text-align: right; }
+          th { background: #f1f5f9; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; font-weight: 900; font-size: 11px; }
+          .btn-print { background: #a6632f; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 12px; }
+          @media print { .btn-print { display: none !important; } }
+        </style>
+      </head>
+      <body>
+        <button class="btn-print" onclick="window.print()">طباعة / حفظ تقرير الفواتير بتنسيق PDF</button>
+        <div class="header">
+          <div>
+            <h2 style="font-size: 18px; font-weight: 900;">RTG-SYSTEM — كشف فواتير المبيعات</h2>
+            <p style="color: #a6632f; font-weight: bold; font-size: 11px;">منظومة إدارة المبيعات والمخازن</p>
+          </div>
+          <div style="text-align: left; font-size: 11px; color: #64748b;">
+            تاريخ الطباعة: ${todayDate}<br>
+            عدد الفواتير المعروضة: ${filteredOrders.length}
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="stat">
+            <div class="stat-title">إجمالي المبيعات المؤكدة</div>
+            <div class="stat-val">${totalAmount.toFixed(2)} د.ل</div>
+          </div>
+          <div class="stat" style="background: #ecfdf5; border-color: #a7f3d0;">
+            <div class="stat-title" style="color: #065f46;">صافي الأرباح الحقيقي</div>
+            <div class="stat-val" style="color: #047857;">${totalProfits.toFixed(2)} د.ل</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">عدد الفواتير</div>
+            <div class="stat-val">${filteredOrders.length}</div>
+          </div>
+          <div class="stat" style="background: #fff1f2; border-color: #fecdd3;">
+            <div class="stat-title" style="color: #9f1239;">الفواتير المرتجعة</div>
+            <div class="stat-val" style="color: #be123c;">${returnsCount} (أرباحها: 0 د.ل)</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>رقم الفاتورة</th>
+              <th>التاريخ</th>
+              <th>الزبون</th>
+              <th>الهاتف</th>
+              <th>طريقة الدفع</th>
+              <th style="text-align: left;">المبلغ الإجمالي</th>
+              <th style="text-align: left;">صافي الربح</th>
+              <th style="text-align: center;">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
   const handleReturnClick = (orderId: string) => {
     soundFx.playWarning();
     onTriggerReturn(orderId);
@@ -109,14 +251,24 @@ export const OrdersList: React.FC<OrdersListProps> = ({
               className="w-full pr-9 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] transition-colors"
             />
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={exportCSV}
-            className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-[#c5834e] dark:text-[#e0a36e] bg-[#c5834e]/10 border border-[#c5834e]/30 hover:bg-[#c5834e]/20 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <i className="fa-solid fa-file-excel text-xs"></i> تصدير البيانات (CSV)
-          </motion.button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={exportPDF}
+              className="w-full sm:w-auto px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-md shadow-[#c5834e]/20"
+            >
+              <i className="fa-solid fa-file-pdf text-xs"></i> تقرير الفواتير (PDF)
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={exportCSV}
+              className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-[#c5834e] dark:text-[#e0a36e] bg-[#c5834e]/10 border border-[#c5834e]/30 hover:bg-[#c5834e]/20 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            >
+              <i className="fa-solid fa-file-excel text-xs"></i> تصدير (CSV)
+            </motion.button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

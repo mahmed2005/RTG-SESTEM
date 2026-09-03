@@ -147,16 +147,24 @@ function doGet(e) {
     if (action === "getMasterConfig" || action === "getSettings") {
       var settings = readSettingsSheet(ss);
       var plans = readPlansSheet(ss);
+      var socialLinks = readSocialSheet(ss);
       return respondOutput({
         success: true,
         status: "online",
         settings: settings,
         plans: plans,
+        socialLinks: socialLinks,
         system: "RTG-SYSTEM Central Cloud v4"
       }, callback);
     }
 
-    // 4. جلب باقات الاشتراكات فقط
+    // 4. جلب روابط التواصل الاجتماعي
+    if (action === "getSocialLinks") {
+      var social = readSocialSheet(ss);
+      return respondOutput({ success: true, socialLinks: social }, callback);
+    }
+
+    // 5. جلب باقات الاشتراكات فقط
     if (action === "getPlans") {
       var allPlans = readPlansSheet(ss);
       return respondOutput({ success: true, plans: allPlans }, callback);
@@ -295,6 +303,17 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
         message: "تم حفظ وتحديث باقات وأسعار الاشتراكات بنجاح"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 5. حفظ روابط التواصل الاجتماعي (واتساب، إنستغرام، تيك توك، فيسبوك)
+    if (action === "saveSocialLinks") {
+      var socialLinksObj = payload.socialLinks || payload;
+      writeSocialSheet(ss, socialLinksObj);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        message: "تم حفظ وتحديث روابط التواصل الاجتماعي بنجاح في جوجل شيت ✓",
+        socialLinks: readSocialSheet(ss)
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -501,6 +520,59 @@ function getDefaultPlans() {
       ]
     }
   ];
+}
+
+// ----------------------------------------------------
+// دوال قراءة وكتابة ورقة [التواصل_الاجتماعي]
+// ----------------------------------------------------
+function readSocialSheet(ss) {
+  var sheet = getOrCreateSheet(ss, "التواصل_الاجتماعي");
+  var defaultLinks = {
+    whatsapp: "https://wa.me/218934590635",
+    instagram: "https://instagram.com",
+    tiktok: "https://tiktok.com",
+    facebook: "https://www.facebook.com/profile.php?id=100063457567880"
+  };
+
+  if (sheet.getLastRow() < 2) {
+    writeSocialSheet(ss, defaultLinks);
+    return defaultLinks;
+  }
+
+  var data = sheet.getDataRange().getValues();
+  var links = {};
+  for (var i = 1; i < data.length; i++) {
+    var platform = (data[i][0] || "").toString().toLowerCase().trim();
+    var url = (data[i][1] || "").toString().trim();
+    if (platform.indexOf("whatsapp") !== -1 || platform.indexOf("واتساب") !== -1) {
+      links.whatsapp = url;
+    } else if (platform.indexOf("instagram") !== -1 || platform.indexOf("إنستغرام") !== -1 || platform.indexOf("انستغرام") !== -1) {
+      links.instagram = url;
+    } else if (platform.indexOf("tiktok") !== -1 || platform.indexOf("تيك توك") !== -1) {
+      links.tiktok = url;
+    } else if (platform.indexOf("facebook") !== -1 || platform.indexOf("فيسبوك") !== -1) {
+      links.facebook = url;
+    }
+  }
+
+  return {
+    whatsapp: links.whatsapp || defaultLinks.whatsapp,
+    instagram: links.instagram || defaultLinks.instagram,
+    tiktok: links.tiktok || defaultLinks.tiktok,
+    facebook: links.facebook || defaultLinks.facebook
+  };
+}
+
+function writeSocialSheet(ss, links) {
+  var sheet = getOrCreateSheet(ss, "التواصل_الاجتماعي");
+  sheet.clear();
+  sheet.appendRow(["المنصة", "رابط الحساب", "تاريخ آخر تعديل"]);
+  styleHeaderRow(sheet, 3);
+  var now = new Date().toLocaleString();
+  sheet.appendRow(["واتساب (WhatsApp)", links.whatsapp || "", now]);
+  sheet.appendRow(["إنستغرام (Instagram)", links.instagram || "", now]);
+  sheet.appendRow(["تيك توك (TikTok)", links.tiktok || "", now]);
+  sheet.appendRow(["فيسبوك (Facebook)", links.facebook || "", now]);
 }
 
 // ----------------------------------------------------

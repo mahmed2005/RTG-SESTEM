@@ -407,6 +407,36 @@ export async function cloudSaveSubscriptionPlans(
 }
 
 /**
+ * Save Social Media Links to Central Cloud Google Sheet
+ */
+export async function cloudSaveSocialLinks(
+  masterScriptUrl: string,
+  socialLinks: { whatsapp: string; instagram: string; tiktok: string; facebook: string }
+): Promise<boolean> {
+  return await sendCloudAction(masterScriptUrl, {
+    action: "saveSocialLinks",
+    socialLinks,
+  });
+}
+
+/**
+ * Get Social Media Links from Central Cloud Google Sheet
+ */
+export async function cloudGetSocialLinks(
+  masterScriptUrl: string
+): Promise<{ whatsapp: string; instagram: string; tiktok: string; facebook: string } | null> {
+  const res = await fetchCloudData<{
+    success?: boolean;
+    socialLinks?: { whatsapp: string; instagram: string; tiktok: string; facebook: string };
+  }>(masterScriptUrl, "getSocialLinks");
+
+  if (res && res.socialLinks) {
+    return res.socialLinks;
+  }
+  return null;
+}
+
+/**
  * Test Master Server connection and fetch current setup
  */
 export async function cloudTestMasterConnection(
