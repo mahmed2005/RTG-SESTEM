@@ -64,8 +64,8 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[57] flex items-center justify-center p-4 animate-fadeInUp">
-      <div className="bg-[#121725] rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-800 text-center space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-[#121418]/90 backdrop-blur-md z-[57] flex items-center justify-center p-4 animate-fadeInUp">
+      <div className="bg-[#121418] rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-[#2c323f] text-center space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="w-16 h-16 bg-[#c5834e]/15 rounded-2xl flex items-center justify-center mx-auto border-2 border-[#c5834e]/30">
           <i className="fa-solid fa-store text-2xl text-[#c5834e]"></i>
         </div>
@@ -85,7 +85,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
               value={shopName}
               onChange={(e) => setShopName(e.target.value)}
               placeholder="مثال: متجر الجيمنج السريع"
-              className="w-full px-3 py-2.5 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
+              className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
             />
           </div>
 
@@ -98,7 +98,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
                 placeholder="الاسم الثلاثي"
-                className="w-full px-3 py-2.5 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
+                className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
               />
             </div>
             <div>
@@ -109,7 +109,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="0912345678"
-                className="w-full px-3 py-2.5 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
+                className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
               />
             </div>
           </div>
@@ -123,7 +123,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="example@mail.com"
-                className="w-full px-3 py-2.5 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
+                className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
               />
             </div>
             <div>
@@ -133,7 +133,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="طرابلس، بنغازي، مصراتة..."
-                className="w-full px-3 py-2.5 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
+                className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
               />
             </div>
           </div>
@@ -143,7 +143,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
             <select
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
-              className="w-full px-3 py-2.5 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
+              className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
             >
               <option value="مجاني - شهر (0 د.ل)">⚡ مجاني — أول شهر (0 د.ل)</option>
               <option value="شهرين (75 د.ل)">🚀 شهرين (75 د.ل) — الأكثر طلباً</option>
@@ -158,7 +158,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="أي استفسار أو تفاصيل إضافية عن المتجر..."
-              className="w-full px-3 py-2 bg-[#0d111a] border border-slate-700 rounded-xl text-white text-sm outline-none focus:border-[#c5834e] resize-none"
+              className="w-full px-3 py-2 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e] resize-none"
             />
           </div>
 
@@ -172,7 +172,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold py-3 rounded-xl transition-all text-sm cursor-pointer"
+              className="bg-[#181c22] hover:bg-[#20252e] text-slate-300 border border-[#2c323f] font-bold py-3 rounded-xl transition-all text-sm cursor-pointer"
             >
               إلغاء
             </button>

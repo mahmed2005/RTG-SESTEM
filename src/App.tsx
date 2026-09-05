@@ -626,17 +626,32 @@ export default function App() {
     const targetOrder = orders.find((o) => o.id === invoiceId);
     if (!targetOrder) return;
 
-    // 1. Extract items to restore from this order
-    const itemsToRestore = extractOrderItems(targetOrder, products);
+    if (targetOrder.status === "مرتجع" || targetOrder.status === "راجع") {
+      showToast("هذه الفاتورة تم إرجاعها بالفعل سابقاً", "info");
+      setReturnInvoiceId(null);
+      return;
+    }
 
-    // 2. Replenish inventory stock immediately
+    // 1. Extract items to restore from this order and aggregate quantities
+    const rawItems = extractOrderItems(targetOrder, products);
+    const aggregatedMap: Record<string, { code: string; qty: number; name: string }> = {};
+    rawItems.forEach((item) => {
+      if (aggregatedMap[item.code]) {
+        aggregatedMap[item.code].qty += item.qty;
+      } else {
+        aggregatedMap[item.code] = { ...item };
+      }
+    });
+    const itemsToRestore = Object.values(aggregatedMap);
+
+    // 2. Replenish inventory stock immediately (EXACTLY ONCE)
     setProducts((prev) => {
       const next: ProductsMap = { ...prev };
       itemsToRestore.forEach((item) => {
         if (next[item.code]) {
           next[item.code] = {
             ...next[item.code],
-            qty: next[item.code].qty + item.qty,
+            qty: Math.max(0, next[item.code].qty + item.qty),
           };
         } else {
           // If not found by barcode key, match by name
@@ -646,7 +661,7 @@ export default function App() {
           if (keyByName) {
             next[keyByName] = {
               ...next[keyByName],
-              qty: next[keyByName].qty + item.qty,
+              qty: Math.max(0, next[keyByName].qty + item.qty),
             };
           }
         }
@@ -668,18 +683,17 @@ export default function App() {
       )
     );
 
-    // 4. Send cloud updates: both refundOrder AND restockProduct for each item
+    // 4. Send cloud updates: ONLY call cloudRefundOrder
+    // NOTE: cloudRefundOrder in Google Apps Script already restocks items.
+    // Calling cloudRestockProduct here caused items to be restocked twice!
     if (apiUrl && !isDemoMode) {
       cloudRefundOrder(apiUrl, invoiceId, itemsToRestore, returnNote).catch(() => {});
-      itemsToRestore.forEach((item) => {
-        cloudRestockProduct(apiUrl, item.code, item.qty).catch(() => {});
-      });
       triggerInstantCloudSync(400);
     }
 
     setReturnInvoiceId(null);
     soundFx.playReturn();
-    showToast(`✓ تم إرجاع الفاتورة #${invoiceId} واستعادة السلع للمخزن تلقائياً`, "success");
+    showToast(`✓ تم إرجاع الفاتورة #${invoiceId} واستعادة السلع للمخزن بنجاح`, "success");
   };
 
   // Inventory Handlers
@@ -725,24 +739,16 @@ export default function App() {
 
     if (apiUrl && !isDemoMode) {
       try {
-        fetch(apiUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "updateProduct",
-            oldBarcode: oldCode,
-            barcode: newCode,
-            name: product.name,
-            qty: product.qty,
-            cost: product.cost,
-            price: product.price,
-          }),
-        }).catch(() => {});
+        // Save/update product with both old and new barcode
+        cloudSaveProduct(apiUrl, newCode, product, oldCode).catch(() => {});
+        // If barcode changed, delete old barcode row as a safety measure for backwards compatibility
+        if (oldCode && oldCode !== newCode) {
+          cloudDeleteProduct(apiUrl, oldCode).catch(() => {});
+        }
       } catch {
         // silently handled
       }
-      triggerInstantCloudSync(400);
+      triggerInstantCloudSync(500);
     }
   };
 
@@ -902,7 +908,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#c5834e] selection:text-white" dir="rtl">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#121418] text-slate-900 dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#c5834e] selection:text-white" dir="rtl">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       {/* Screen 1: Splash Screen */}
@@ -1352,6 +1358,7 @@ export default function App() {
                       onRecordPayment={handleRecordDebtPayment}
                       onCloseDebt={handleCloseDebt}
                       showToast={showToast}
+                      shopName={shopName || "RTG-SESTEM"}
                     />
                   )}
                 </motion.div>

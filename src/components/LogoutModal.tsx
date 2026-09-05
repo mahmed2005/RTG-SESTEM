@@ -14,8 +14,8 @@ export const LogoutModal: React.FC<LogoutModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeInUp">
-      <div className="bg-[#1e293b] rounded-2xl border border-slate-800 p-5 w-full max-w-sm shadow-2xl text-center space-y-4">
+    <div className="fixed inset-0 bg-[#121418]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeInUp">
+      <div className="bg-[#121418] rounded-2xl border border-[#2c323f] p-5 w-full max-w-sm shadow-2xl text-center space-y-4">
         <div className="w-12 h-12 bg-amber-500/15 text-amber-400 rounded-full flex items-center justify-center text-xl mx-auto border border-amber-500/30">
           <i className="fa-solid fa-power-off"></i>
         </div>
@@ -36,7 +36,7 @@ export const LogoutModal: React.FC<LogoutModalProps> = ({
           </button>
           <button
             onClick={onClose}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+            className="bg-[#181c22] hover:bg-[#20252e] text-slate-300 border border-[#2c323f] font-bold py-2.5 rounded-xl text-xs cursor-pointer"
           >
             إلغاء
           </button>

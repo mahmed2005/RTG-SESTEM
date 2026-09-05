@@ -18,6 +18,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 }) => {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [enableCustomerData, setEnableCustomerData] = useState<boolean>(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerBackupPhone, setCustomerBackupPhone] = useState("");
@@ -141,10 +142,10 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       delivery: Number(deliveryFee || 0),
       discount: Number(discountAmount || 0),
       status: "في الانتظار",
-      cName: customerName.trim() || "زبون مباشر",
-      cPhone: customerPhone.trim() || "غير محدد",
-      cBackup: customerBackupPhone.trim(),
-      cArea: customerArea.trim() || "المتجر / استلام",
+      cName: enableCustomerData && customerName.trim() ? customerName.trim() : "زبون مباشر",
+      cPhone: enableCustomerData && customerPhone.trim() ? customerPhone.trim() : "غير محدد",
+      cBackup: enableCustomerData ? customerBackupPhone.trim() : "",
+      cArea: enableCustomerData && customerArea.trim() ? customerArea.trim() : "المتجر / استلام",
       cartItems: [...cart],
     };
 
@@ -313,32 +314,84 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           </div>
 
           {/* Customer & Order Metadata Form */}
-          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="اسم الزبون (اختياري)..."
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
-              />
-              <input
-                type="text"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="رقم الهاتف..."
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] font-mono text-right"
-              />
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+            {/* Customer Data Entry Toggle Switch */}
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800/80 transition-all">
+              <div className="flex items-center gap-2">
+                <i className={`fa-solid fa-user-tag text-xs ${enableCustomerData ? "text-[#c5834e]" : "text-slate-400"}`}></i>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  إدخال بيانات الزبون:
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-all ${
+                  enableCustomerData
+                    ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                    : "bg-slate-200/70 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
+                }`}>
+                  {enableCustomerData ? "مفعلة (مخصص)" : "مقفلة (زبون مباشر)"}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEnableCustomerData(!enableCustomerData);
+                  soundFx.playBeep();
+                }}
+                className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors cursor-pointer focus:outline-none ${
+                  enableCustomerData ? "bg-[#c5834e]" : "bg-slate-300 dark:bg-slate-700"
+                }`}
+                title={enableCustomerData ? "تعطيل إدخال بيانات الزبون (العودة إلى زبون مباشر)" : "تفعيل إدخال بيانات الزبون"}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                    enableCustomerData ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={customerArea}
-                onChange={(e) => setCustomerArea(e.target.value)}
-                placeholder="المنطقة أو العنوان..."
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
-              />
+            {/* Conditionally rendered Customer Input Fields */}
+            <AnimatePresence>
+              {enableCustomerData && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-2 overflow-hidden"
+                >
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="اسم الزبون..."
+                      className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
+                    />
+                    <input
+                      type="text"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="رقم الهاتف..."
+                      className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e] font-mono text-right"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={customerArea}
+                      onChange={(e) => setCustomerArea(e.target.value)}
+                      placeholder="المنطقة أو العنوان..."
+                      className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div>
+              <label className="block text-[10px] text-slate-500 font-bold mb-1">طريقة الدفع</label>
               <select
                 value={payMethod}
                 onChange={(e) => setPayMethod(e.target.value)}

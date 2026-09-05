@@ -967,19 +967,34 @@ function doPost(e) {
       var pSheet = ss.getSheetByName("المنتجات");
       if (!pSheet) pSheet = ss.insertSheet("المنتجات");
 
-      var barcode = payload.barcode || payload.oldBarcode;
+      // البحث عن المنتج بالكود القديم إن كان تحديثاً، لمنع تكرار السلعة عند تعديل الباركود
+      var searchBarcode = (action === "updateProduct" && payload.oldBarcode)
+        ? payload.oldBarcode
+        : (payload.oldBarcode || payload.barcode);
+
       var pRows = pSheet.getDataRange().getValues();
       var foundRow = -1;
 
+      // أولاً: البحث بالباركود القديم أو الحالي
       for (var pr = 1; pr < pRows.length; pr++) {
-        if (pRows[pr][0] && pRows[pr][0].toString().trim() === barcode.toString().trim()) {
+        if (pRows[pr][0] && pRows[pr][0].toString().trim() === searchBarcode.toString().trim()) {
           foundRow = pr + 1;
           break;
         }
       }
 
+      // ثانياً: إن لم يُعثر عليه وكان هناك اسم، نبحث بالاسم لتحديث الباركود لنفس المنتج بدلاً من تكراره
+      if (foundRow === -1 && payload.name) {
+        for (var pr2 = 1; pr2 < pRows.length; pr2++) {
+          if (pRows[pr2][1] && pRows[pr2][1].toString().trim().toLowerCase() === payload.name.toString().trim().toLowerCase()) {
+            foundRow = pr2 + 1;
+            break;
+          }
+        }
+      }
+
       var pRowVals = [
-        payload.barcode || barcode,
+        payload.barcode || searchBarcode,
         payload.name || "",
         Number(payload.qty) || 0,
         Number(payload.cost) || 0,

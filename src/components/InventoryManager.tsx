@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Product, ProductsMap } from "../types";
+import { soundFx } from "../services/soundEffects";
 
 interface InventoryManagerProps {
   products: ProductsMap;
@@ -30,6 +31,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [editProductCode, setEditProductCode] = useState<string | null>(null);
   const [restockProductCode, setRestockProductCode] = useState<string | null>(null);
   const [stickerProductCode, setStickerProductCode] = useState<string | null>(null);
+  const [stickerCopies, setStickerCopies] = useState<number>(1);
   const [deleteConfirmCode, setDeleteConfirmCode] = useState<string | null>(null);
 
   // Quick Price Edit Modal State
@@ -300,6 +302,366 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     showToast("✓ تم تصدير ملف جرد المخزون بنجاح", "success");
   };
 
+  // Export Comprehensive Inventory PDF
+  const handleExportInventoryPDF = () => {
+    soundFx.playSuccess();
+    const printWin = window.open("", "_blank", "width=920,height=900");
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const todayDate = new Date().toLocaleDateString("ar-LY", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const entries = Object.entries(products) as [string, Product][];
+    let totalPieces = 0;
+    let totalCostVal = 0;
+    let totalRetailVal = 0;
+    let outCount = 0;
+    let lowCount = 0;
+
+    entries.forEach(([, p]) => {
+      const q = Number(p.qty) || 0;
+      const c = Number(p.cost) || 0;
+      const pr = Number(p.price) || 0;
+      totalPieces += q;
+      totalCostVal += q * c;
+      totalRetailVal += q * pr;
+      if (q === 0) outCount++;
+      else if (q <= 3) lowCount++;
+    });
+
+    const totalExpectedMargin = Math.max(0, totalRetailVal - totalCostVal);
+
+    const rowsHtml = entries
+      .map(([code, p], idx) => {
+        const q = Number(p.qty) || 0;
+        const c = Number(p.cost) || 0;
+        const pr = Number(p.price) || 0;
+        const totalC = q * c;
+        const totalR = q * pr;
+        const profit = totalR - totalC;
+
+        let statusText = "متوفر";
+        let statusBg = "#ecfdf5";
+        let statusColor = "#065f46";
+        if (q === 0) {
+          statusText = "نافد";
+          statusBg = "#fef2f2";
+          statusColor = "#991b1b";
+        } else if (q <= 3) {
+          statusText = "منخفض";
+          statusBg = "#fffbeb";
+          statusColor = "#92400e";
+        }
+
+        return `
+          <tr>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; direction: ltr; text-align: center;">${code}</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; font-weight: bold;">${p.name}</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; font-family: monospace;">${q}</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${c.toFixed(2)} د.ل</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold; color: #a6632f;">${pr.toFixed(2)} د.ل</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${totalC.toFixed(2)} د.ل</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold;">${totalR.toFixed(2)} د.ل</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #047857;">${profit.toFixed(2)} د.ل</td>
+            <td style="padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center;">
+              <span style="background: ${statusBg}; color: ${statusColor}; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: bold;">${statusText}</span>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>تقرير جرد المخزون الشامل - ${shopName}</title>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&family=Tajawal:wght@400;600;700;800&display=swap">
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', 'Tajawal', sans-serif; }
+          body { background: #fff; color: #0f172a; padding: 20px; line-height: 1.4; font-size: 12px; }
+          @page { size: A4 landscape; margin: 10mm; }
+          .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+          .title { font-size: 20px; font-weight: 900; color: #0f172a; }
+          .subtitle { font-size: 13px; color: #a6632f; font-weight: bold; margin-top: 3px; }
+          .date { font-size: 11px; color: #64748b; margin-top: 4px; }
+          .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+          .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; text-align: right; background: #f8fafc; }
+          .card-title { font-size: 10px; color: #64748b; font-weight: bold; margin-bottom: 3px; }
+          .card-value { font-size: 16px; font-weight: 900; font-family: monospace; color: #0f172a; }
+          .card-sub { font-size: 10px; color: #10b981; margin-top: 3px; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+          th { background: #f1f5f9; color: #0f172a; padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: 900; }
+          .footer { margin-top: 24px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 10px; font-size: 11px; color: #64748b; }
+          .btn-print { background: #a6632f; color: #fff; padding: 8px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 12px; }
+          @media print {
+            .btn-print { display: none !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div style="text-align: left;">
+          <button class="btn-print" onclick="window.print()">طباعة / حفظ بتنسيق PDF</button>
+        </div>
+        <div class="header">
+          <div class="title">${shopName} — تقرير جرد المخزون الشامل</div>
+          <div class="subtitle">بيان تفصيلي بأسعار التكلفة وسعر البيع والقيمة السوقية للمخزن</div>
+          <div class="date">تاريخ ووقت إصدار التقرير: ${todayDate}</div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="card-title">إجمالي الأصناف</div>
+            <div class="card-value">${entries.length} صنف</div>
+            <div class="card-sub" style="color: #64748b;">${totalPieces} قطعة متوفرة</div>
+          </div>
+          <div class="card">
+            <div class="card-title">القيمة بسعر التكلفة (جملة)</div>
+            <div class="card-value">${totalCostVal.toFixed(2)} د.ل</div>
+            <div class="card-sub" style="color: #64748b;">رأس المال المستثمر</div>
+          </div>
+          <div class="card">
+            <div class="card-title">القيمة بسعر البيع (مفرق)</div>
+            <div class="card-value">${totalRetailVal.toFixed(2)} د.ل</div>
+            <div class="card-sub" style="color: #64748b;">العائد الإجمالي المتوقع</div>
+          </div>
+          <div class="card" style="background: #ecfdf5; border-color: #a7f3d0;">
+            <div class="card-title" style="color: #065f46;">صافي الأرباح المتوقعة</div>
+            <div class="card-value" style="color: #047857;">+${totalExpectedMargin.toFixed(2)} د.ل</div>
+            <div class="card-sub" style="color: #047857;">هامش ربح المخزون</div>
+          </div>
+          <div class="card" style="background: #fff1f2; border-color: #fecdd3;">
+            <div class="card-title" style="color: #9f1239;">تنبيهات المخزون</div>
+            <div class="card-value" style="color: #be123c;">${outCount + lowCount} منتج</div>
+            <div class="card-sub" style="color: #be123c;">${outCount} نفد • ${lowCount} منخفض</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35px;">#</th>
+              <th>الباركود</th>
+              <th style="text-align: right;">اسم السلعة / المنتج</th>
+              <th>الكمية</th>
+              <th>سعر التكلفة</th>
+              <th>سعر البيع</th>
+              <th>إجمالي التكلفة</th>
+              <th>إجمالي البيع</th>
+              <th>الربح المتوقع</th>
+              <th>حالة المخزون</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #f8fafc; font-weight: 900;">
+              <td colspan="3" style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: right;">الإجمالي العام</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${totalPieces}</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">-</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">-</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${totalCostVal.toFixed(2)} د.ل</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${totalRetailVal.toFixed(2)} د.ل</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #047857;">+${totalExpectedMargin.toFixed(2)} د.ل</td>
+              <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">-</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="footer">
+          تم إنشاء هذا التقرير آلياً عبر منظومة ${shopName} لإدارة المبيعات والمخازن • ${todayDate}
+        </div>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
+    showToast("✓ تم فتح تقرير جرد المخزون الشامل بتنسيق PDF بنجاح", "success");
+  };
+
+  // Print Barcode Sticker (Thermal & Sheets)
+  const handlePrintBarcodeSticker = (code: string, copiesCount: number = 1) => {
+    const item = products[code];
+    if (!item) return;
+    soundFx.playCashRegister();
+
+    const printWin = window.open("", "_blank", "width=500,height=600");
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const count = Math.max(1, copiesCount || 1);
+    const labelsHtml = Array.from({ length: count })
+      .map(
+        () => `
+        <div class="label-item">
+          <div class="shop-name">${shopName}</div>
+          <div class="prod-name">${item.name}</div>
+          <div class="barcode-svg">
+            <svg viewBox="0 0 200 45" style="width: 100%; height: 38px;">
+              <rect x="5" y="0" width="3" height="40" fill="#000" />
+              <rect x="11" y="0" width="1" height="40" fill="#000" />
+              <rect x="15" y="0" width="4" height="40" fill="#000" />
+              <rect x="22" y="0" width="2" height="40" fill="#000" />
+              <rect x="27" y="0" width="5" height="40" fill="#000" />
+              <rect x="35" y="0" width="2" height="40" fill="#000" />
+              <rect x="40" y="0" width="3" height="40" fill="#000" />
+              <rect x="46" y="0" width="6" height="40" fill="#000" />
+              <rect x="55" y="0" width="1" height="40" fill="#000" />
+              <rect x="59" y="0" width="4" height="40" fill="#000" />
+              <rect x="66" y="0" width="2" height="40" fill="#000" />
+              <rect x="71" y="0" width="5" height="40" fill="#000" />
+              <rect x="79" y="0" width="3" height="40" fill="#000" />
+              <rect x="85" y="0" width="2" height="40" fill="#000" />
+              <rect x="90" y="0" width="6" height="40" fill="#000" />
+              <rect x="99" y="0" width="1" height="40" fill="#000" />
+              <rect x="103" y="0" width="4" height="40" fill="#000" />
+              <rect x="110" y="0" width="2" height="40" fill="#000" />
+              <rect x="115" y="0" width="5" height="40" fill="#000" />
+              <rect x="123" y="0" width="2" height="40" fill="#000" />
+              <rect x="128" y="0" width="4" height="40" fill="#000" />
+              <rect x="135" y="0" width="1" height="40" fill="#000" />
+              <rect x="139" y="0" width="5" height="40" fill="#000" />
+              <rect x="147" y="0" width="3" height="40" fill="#000" />
+              <rect x="153" y="0" width="2" height="40" fill="#000" />
+              <rect x="158" y="0" width="6" height="40" fill="#000" />
+              <rect x="167" y="0" width="1" height="40" fill="#000" />
+              <rect x="171" y="0" width="4" height="40" fill="#000" />
+              <rect x="178" y="0" width="3" height="40" fill="#000" />
+              <rect x="184" y="0" width="2" height="40" fill="#000" />
+              <rect x="189" y="0" width="4" height="40" fill="#000" />
+            </svg>
+            <div class="code-text">${code}</div>
+          </div>
+          <div class="price-badge">${Number(item.price).toFixed(2)} د.ل</div>
+        </div>
+      `
+      )
+      .join("");
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>ملصق باركود - ${item.name}</title>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&family=Tajawal:wght@700;900&display=swap">
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', 'Tajawal', sans-serif; }
+          body { background: #fff; color: #000; padding: 6px; }
+          @page { size: auto; margin: 2mm; }
+          .labels-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+          }
+          .label-item {
+            width: 48mm;
+            height: 32mm;
+            border: 1px dashed #94a3b8;
+            border-radius: 4px;
+            padding: 3mm 2mm;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            page-break-inside: avoid;
+            background: #fff;
+          }
+          .shop-name {
+            font-size: 8px;
+            font-weight: 900;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .prod-name {
+            font-size: 10px;
+            font-weight: 900;
+            color: #000;
+            line-height: 1.15;
+            max-height: 22px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          .barcode-svg {
+            margin: 1px 0;
+          }
+          .code-text {
+            font-family: monospace;
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 1.5px;
+            color: #000;
+            direction: ltr;
+          }
+          .price-badge {
+            font-family: monospace;
+            font-size: 13px;
+            font-weight: 900;
+            color: #000;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 1px;
+          }
+          .no-print-bar {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+          }
+          .btn-action {
+            background: #c57b42;
+            color: #fff;
+            padding: 7px 18px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+          }
+          @media print {
+            body { padding: 0 !important; }
+            .no-print-bar { display: none !important; }
+            .label-item { border: none !important; margin: 0 auto; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print-bar">
+          <button class="btn-action" onclick="window.print()">🖨️ بدء طباعة الملصقات (${count} ملصق)</button>
+        </div>
+        <div class="labels-container">
+          ${labelsHtml}
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
+    showToast(`✓ تم فتح أمر طباعة ملصق "${item.name}" (${count} ملصق) بنجاح`, "success");
+  };
+
   // Stats Calculations
   const productEntries: [string, Product][] = Object.entries(products);
   const totalItemsCount = productEntries.length;
@@ -426,12 +788,21 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
             <button
               onClick={handleExportCSV}
               className="px-3 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer transition-all"
+              title="تصدير كشف الجرد بصيغة ملف إكسل CSV"
             >
-              <i className="fa-solid fa-file-excel text-emerald-600"></i> تصدير كشف الجرد
+              <i className="fa-solid fa-file-excel text-emerald-600"></i> تصدير (Excel)
+            </button>
+
+            <button
+              onClick={handleExportInventoryPDF}
+              className="px-3 py-2 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-[#c5834e] dark:text-[#d88b4f] border border-[#c5834e]/30 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all"
+              title="تصدير تقرير جرد المخزون الشامل بتنسيق PDF رسمي"
+            >
+              <i className="fa-solid fa-file-pdf text-red-500"></i> تصدير جرد المخزون (PDF)
             </button>
 
             <button
@@ -1292,14 +1663,69 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
               </div>
             </div>
 
+            {/* Copies Selector */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 text-right space-y-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                عدد النسخ المراد طباعتها:
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStickerCopies(1)}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
+                    stickerCopies === 1
+                      ? "bg-[#c5834e] text-white border-[#c5834e]"
+                      : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  نسخة واحدة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStickerCopies(5)}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
+                    stickerCopies === 5
+                      ? "bg-[#c5834e] text-white border-[#c5834e]"
+                      : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  5 نسخ
+                </button>
+                {products[stickerProductCode].qty > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setStickerCopies(products[stickerProductCode].qty)}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
+                      stickerCopies === products[stickerProductCode].qty
+                        ? "bg-[#c5834e] text-white border-[#c5834e]"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                    }`}
+                  >
+                    بعدد المخزن ({products[stickerProductCode].qty})
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-[11px] text-slate-500">أو حدد رقماً مخصصاً:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={stickerCopies}
+                  onChange={(e) => setStickerCopies(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-20 text-center font-bold text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg py-1 text-slate-900 dark:text-white outline-none focus:border-[#c5834e]"
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 onClick={() => {
-                  window.print();
+                  handlePrintBarcodeSticker(stickerProductCode, stickerCopies);
                 }}
-                className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                className="bg-[#c5834e] hover:bg-[#a6632f] text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all active:scale-95"
               >
-                <i className="fa-solid fa-print"></i> طباعة الملصق
+                <i className="fa-solid fa-print"></i> بدء طباعة الملصق ({stickerCopies})
               </button>
               <button
                 onClick={() => setStickerProductCode(null)}

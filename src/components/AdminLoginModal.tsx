@@ -34,8 +34,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[65] flex items-center justify-center p-4 animate-fadeInUp" dir="rtl">
-      <div className="bg-[#121725] rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-800 text-center space-y-4">
+    <div className="fixed inset-0 bg-[#121418]/90 backdrop-blur-md z-[65] flex items-center justify-center p-4 animate-fadeInUp" dir="rtl">
+      <div className="bg-[#121418] rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#2c323f] text-center space-y-4">
         <div className="w-12 h-12 rounded-2xl bg-[#c5834e]/20 border border-[#c5834e]/40 text-[#c5834e] flex items-center justify-center mx-auto text-xl shadow-inner">
           <i className="fa-solid fa-lock"></i>
         </div>
@@ -57,7 +57,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                 if (error) setError(false);
               }}
               placeholder="كلمة مرور المشرف..."
-              className="w-full px-4 py-2.5 bg-[#090d16] border border-slate-700 rounded-xl text-center text-xs text-white placeholder-slate-500 outline-none focus:border-[#c5834e] transition-colors"
+              className="w-full px-4 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-center text-xs text-white placeholder-slate-500 outline-none focus:border-[#c5834e] transition-colors"
             />
           </div>
 

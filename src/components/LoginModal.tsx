@@ -205,8 +205,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[56] flex items-center justify-center p-4 animate-fadeInUp" dir="rtl">
-      <div className="bg-[#121725] rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-800 text-center space-y-4">
+    <div className="fixed inset-0 bg-[#121418]/90 backdrop-blur-md z-[56] flex items-center justify-center p-4 animate-fadeInUp" dir="rtl">
+      <div className="bg-[#121418] rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#2c323f] text-center space-y-4">
         <RtgLogo size="large" />
         <div>
           <h2 className="text-xl font-black text-white tracking-wide">RTG-SESTEM</h2>
@@ -225,7 +225,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder="أدخل اسم المستخدم أو كود المتجر"
-              className="w-full pr-10 pl-4 py-3 bg-[#0d111a] border border-slate-700 rounded-xl text-right font-medium text-white focus:border-[#c5834e] outline-none text-xs transition-all"
+              className="w-full pr-10 pl-4 py-3 bg-[#181c22] border border-[#2c323f] rounded-xl text-right font-medium text-white focus:border-[#c5834e] outline-none text-xs transition-all"
             />
           </div>
         </div>
@@ -243,7 +243,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLogin()}
               placeholder="أدخل كلمة المرور"
-              className="w-full pr-10 pl-10 py-3 bg-[#0d111a] border border-slate-700 rounded-xl text-right font-medium text-white focus:border-[#c5834e] outline-none text-xs transition-all"
+              className="w-full pr-10 pl-10 py-3 bg-[#181c22] border border-[#2c323f] rounded-xl text-right font-medium text-white focus:border-[#c5834e] outline-none text-xs transition-all"
             />
             <button
               type="button"
@@ -277,7 +277,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </p>
         )}
 
-        <div className="border-t border-slate-800 pt-3 space-y-1.5">
+        <div className="border-t border-[#2c323f] pt-3 space-y-1.5">
           <p className="text-[10px] text-slate-400">الشهر الأول تجريبي ومجاني لجميع المشتركين الجدد ⚡</p>
           <a
             href="https://wa.me/218934590635"
