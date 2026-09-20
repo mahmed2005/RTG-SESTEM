@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Debt } from "../types";
 import { soundFx } from "../services/soundEffects";
+import { printService } from "../services/printHelper";
 
 interface DebtsTrackerProps {
   debts: Debt[];
@@ -138,11 +139,6 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
   // Export Comprehensive Debts Statement (PDF)
   const handleExportDebtsPDF = () => {
     soundFx.playSuccess();
-    const printWin = window.open("", "_blank", "width=920,height=900");
-    if (!printWin) {
-      window.print();
-      return;
-    }
 
     const todayDate = new Date().toLocaleDateString("ar-LY", {
       year: "numeric",
@@ -198,7 +194,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
       })
       .join("");
 
-    printWin.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
@@ -221,16 +217,9 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
           table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
           th { background: #f1f5f9; color: #0f172a; padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: 900; }
           .footer { margin-top: 24px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 10px; font-size: 11px; color: #64748b; }
-          .btn-print { background: #a6632f; color: #fff; padding: 8px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 12px; }
-          @media print {
-            .btn-print { display: none !important; }
-          }
         </style>
       </head>
       <body>
-        <div style="text-align: left;">
-          <button class="btn-print" onclick="window.print()">طباعة / حفظ بتنسيق PDF</button>
-        </div>
         <div class="header">
           <div class="title">${shopName} — كشف سجل الديون والمعاملات المالية</div>
           <div class="subtitle">تقرير شامل بمستحقات العملاء والتزامات الموردين والأرصدة المتبقية</div>
@@ -286,19 +275,18 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
         </div>
       </body>
       </html>
-    `);
-    printWin.document.close();
-    showToast("✓ تم فتح كشف سجل الديون والمعاملات بتنسيق PDF بنجاح", "success");
+    `;
+
+    printService.showDocument({
+      title: `كشف سجل الديون والمعاملات - ${shopName}`,
+      html,
+    });
+    showToast("✓ تم فتح كشف سجل الديون والمعاملات بنجاح", "success");
   };
 
   // Print Single Debt Voucher / Statement
   const handlePrintSingleDebt = (debt: Debt) => {
     soundFx.playCashRegister();
-    const printWin = window.open("", "_blank", "width=520,height=700");
-    if (!printWin) {
-      window.print();
-      return;
-    }
 
     const todayDate = new Date().toLocaleDateString("ar-LY", {
       year: "numeric",
@@ -313,7 +301,7 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
     const remAmt = Number(debt.remaining) || 0;
     const isOwedToMe = debt.type === "لي";
 
-    printWin.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
@@ -337,19 +325,13 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
           .signatures { display: flex; justify-content: space-between; margin-top: 25px; padding-top: 10px; border-top: 1px solid #000; }
           .sig-box { text-align: center; width: 45%; font-size: 11px; font-weight: bold; }
           .sig-line { border-bottom: 1px dotted #000; height: 35px; margin-bottom: 4px; }
-          .btn-bar { text-align: center; margin-bottom: 15px; }
-          .btn { background: #c57b42; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; }
           @media print {
-            .btn-bar { display: none !important; }
             body { padding: 0 !important; }
             .receipt-box { border: 1px solid #000 !important; }
           }
         </style>
       </head>
       <body>
-        <div class="btn-bar">
-          <button class="btn" onclick="window.print()">🖨️ طباعة سند الدين</button>
-        </div>
         <div class="receipt-box">
           <div class="top-title">
             <div class="shop">${shopName}</div>
@@ -409,8 +391,12 @@ export const DebtsTracker: React.FC<DebtsTrackerProps> = ({
         </div>
       </body>
       </html>
-    `);
-    printWin.document.close();
+    `;
+
+    printService.showDocument({
+      title: `وصل سند دين - ${debt.name}`,
+      html,
+    });
     showToast(`✓ تم فتح سند الدين الخاص بـ "${debt.name}" بنجاح`, "success");
   };
 

@@ -355,10 +355,10 @@ input[type="number"]::-webkit-outer-spin-button {
   animation: pulseGlow 3s infinite ease-in-out;
 }
 
-/* Print style */
+/* Print style - Robust for Mobile & Desktop */
 @media print {
   @page {
-    margin: 4mm;
+    margin: 6mm;
     size: auto;
   }
   html, body {
@@ -385,7 +385,10 @@ input[type="number"]::-webkit-outer-spin-button {
   body * {
     visibility: hidden !important;
   }
-  #printable-receipt, #printable-receipt * {
+  /* Show receipt or printable document area clearly */
+  #printable-receipt, #printable-receipt *,
+  #rtg-printable-area, #rtg-printable-area *,
+  .printable-document, .printable-document * {
     visibility: visible !important;
   }
   #printable-receipt {
@@ -399,6 +402,18 @@ input[type="number"]::-webkit-outer-spin-button {
     background: white !important;
     color: black !important;
     padding: 4mm !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  #rtg-printable-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 6mm !important;
+    background: white !important;
+    color: black !important;
     border: none !important;
     box-shadow: none !important;
   }

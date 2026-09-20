@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Order } from "../types";
 import { soundFx } from "../services/soundEffects";
+import { printService } from "../services/printHelper";
 import { motion } from "motion/react";
 
 interface OrdersListProps {
@@ -21,7 +22,28 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   const [methodFilter, setMethodFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
 
-  const filteredOrders = orders.filter((o) => {
+  // Sort orders newest-first
+  const sortedOrders = useMemo(() => {
+    return [...orders].sort((a, b) => {
+      const parseTime = (dateStr: string) => {
+        if (!dateStr) return 0;
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) return d.getTime();
+        const match = dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+        if (match) {
+          return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3])).getTime();
+        }
+        return 0;
+      };
+      const tA = parseTime(a.date);
+      const tB = parseTime(b.date);
+      if (tA !== tB && tA > 0 && tB > 0) return tB - tA;
+
+      return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
+    });
+  }, [orders]);
+
+  const filteredOrders = sortedOrders.filter((o) => {
     const q = search.toLowerCase().trim();
     if (
       q &&
@@ -39,7 +61,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         return false;
       }
     }
-    if (methodFilter && o.method !== methodFilter) return false;
+    if (methodFilter && o.method !== methodFilter && !o.method.includes(methodFilter)) return false;
     if (dateFilter) {
       const orderDate = typeof o.date === "string" ? o.date.substring(0, 10) : "";
       if (!orderDate.includes(dateFilter)) return false;
@@ -87,12 +109,6 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   const exportPDF = () => {
     soundFx.playSuccess();
     if (filteredOrders.length === 0) return;
-
-    const printWin = window.open("", "_blank", "width=950,height=850");
-    if (!printWin) {
-      window.print();
-      return;
-    }
 
     const todayDate = new Date().toLocaleDateString("ar-LY", {
       year: "numeric",
@@ -143,7 +159,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
       })
       .join("");
 
-    printWin.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
@@ -161,12 +177,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           .stat-val { font-size: 16px; font-weight: 900; font-family: monospace; color: #0f172a; }
           table { width: 100%; border-collapse: collapse; text-align: right; }
           th { background: #f1f5f9; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; font-weight: 900; font-size: 11px; }
-          .btn-print { background: #a6632f; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 12px; }
-          @media print { .btn-print { display: none !important; } }
         </style>
       </head>
       <body>
-        <button class="btn-print" onclick="window.print()">طباعة / حفظ تقرير الفواتير بتنسيق PDF</button>
         <div class="header">
           <div>
             <h2 style="font-size: 18px; font-weight: 900;">RTG-SYSTEM — كشف فواتير المبيعات</h2>
@@ -214,16 +227,14 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             ${rowsHtml}
           </tbody>
         </table>
-
-        <script>
-          window.onload = function() {
-            setTimeout(function() { window.print(); }, 300);
-          };
-        </script>
       </body>
       </html>
-    `);
-    printWin.document.close();
+    `;
+
+    printService.showDocument({
+      title: "كشف فواتير المبيعات - RTG-SYSTEM",
+      html,
+    });
   };
 
   const handleReturnClick = (orderId: string) => {
@@ -296,11 +307,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none focus:border-[#c5834e]"
           >
             <option value="">جميع طرق الدفع</option>
-            <option value="كاش">كاش نقدي</option>
-            <option value="مصراتي">خدمة مصراتي</option>
-            <option value="سداد">خدمة سداد</option>
-            <option value="تداول">خدمة تداول</option>
+            <option value="كاش">كاش</option>
+            <option value="سداد">خدمات سداد</option>
+            <option value="تداول">خدمات تداول</option>
             <option value="بطاقة">بطاقة مصرفية</option>
+            <option value="حوالة">حوالة مصرفية</option>
           </select>
 
           <input
@@ -469,17 +480,43 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                       isReturned ? "bg-rose-500/5 border border-rose-500/20" : ""
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-xs text-[#c5834e] dark:text-[#e0a36e]">
-                        #{o.id}
-                      </span>
-                      {isReturned ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1">
-                          <i className="fa-solid fa-rotate-left text-[9px]"></i> مرتجع
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-xs text-[#c5834e] dark:text-[#e0a36e]">
+                          #{o.id}
                         </span>
+                        {o.deliveryType && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
+                            {o.deliveryType === "فوري" ? "⚡ فوري" : o.deliveryType === "توصيل" ? "🚚 توصيل" : "⏳ مؤجل"}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Interactive Status Changer on Mobile */}
+                      {!isReturned ? (
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={o.status}
+                            onChange={(e) => {
+                              soundFx.playClick();
+                              onUpdateStatus(o.id, e.target.value);
+                            }}
+                            className={`text-[11px] font-bold rounded-lg px-2.5 py-1 outline-none border transition-all cursor-pointer ${
+                              o.status === "تم التوصيل"
+                                ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30"
+                                : o.status === "في الطريق"
+                                ? "bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/30"
+                                : "bg-blue-50 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-500/30"
+                            }`}
+                          >
+                            <option value="في الانتظار">⏳ في الانتظار</option>
+                            <option value="في الطريق">🚚 في الطريق</option>
+                            <option value="تم التوصيل">✓ تم التوصيل</option>
+                          </select>
+                        </div>
                       ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                          {o.status}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center gap-1">
+                          <i className="fa-solid fa-rotate-left text-[9px]"></i> مرتجع للمخزن
                         </span>
                       )}
                     </div>

@@ -57,6 +57,7 @@ import { ReturnModal } from "./components/ReturnModal";
 import { LogoutModal } from "./components/LogoutModal";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { AdminLoginModal } from "./components/AdminLoginModal";
+import { DocumentViewerModal } from "./components/DocumentViewerModal";
 
 const STORAGE_KEYS = {
   PRODUCTS: "rtg_offline_products_v2",
@@ -1413,6 +1414,9 @@ export default function App() {
         onConfirm={handleConfirmLogout}
         onClose={() => setIsLogoutOpen(false)}
       />
+
+      {/* Global Mobile-Ready PDF / Document Viewer Modal */}
+      <DocumentViewerModal />
     </div>
   );
 }

@@ -24,6 +24,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const [customerBackupPhone, setCustomerBackupPhone] = useState("");
   const [customerArea, setCustomerArea] = useState("");
   const [payMethod, setPayMethod] = useState("كاش");
+  const [deliveryType, setDeliveryType] = useState<"فوري" | "توصيل" | "مؤجل">("فوري");
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [paidAmount, setPaidAmount] = useState<string>("");
@@ -90,6 +91,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     setCustomerPhone("");
     setCustomerBackupPhone("");
     setCustomerArea("");
+    setDeliveryType("فوري");
     setDeliveryFee(0);
     setDiscountAmount(0);
     setPaidAmount("");
@@ -132,6 +134,18 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       }
     });
 
+    // Determine initial status based on fulfillment mode
+    const initialStatus =
+      deliveryType === "فوري"
+        ? "تم التوصيل"
+        : "في الانتظار";
+
+    const defaultCustomerName =
+      deliveryType === "فوري" ? "زبون مباشر (استلام فوري)" : "زبون مباشر";
+
+    const defaultArea =
+      deliveryType === "فوري" ? "استلام فوري من المحل" : "المتجر / استلام";
+
     const newOrder: Order = {
       id: invoiceId,
       date: dateStr,
@@ -141,11 +155,12 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       method: payMethod,
       delivery: Number(deliveryFee || 0),
       discount: Number(discountAmount || 0),
-      status: "في الانتظار",
-      cName: enableCustomerData && customerName.trim() ? customerName.trim() : "زبون مباشر",
+      deliveryType: deliveryType,
+      status: initialStatus,
+      cName: enableCustomerData && customerName.trim() ? customerName.trim() : defaultCustomerName,
       cPhone: enableCustomerData && customerPhone.trim() ? customerPhone.trim() : "غير محدد",
       cBackup: enableCustomerData ? customerBackupPhone.trim() : "",
-      cArea: enableCustomerData && customerArea.trim() ? customerArea.trim() : "المتجر / استلام",
+      cArea: enableCustomerData && customerArea.trim() ? customerArea.trim() : defaultArea,
       cartItems: [...cart],
     };
 
@@ -315,6 +330,70 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
           {/* Customer & Order Metadata Form */}
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+            {/* Delivery / Fulfillment Mode Switcher (Default: بيع فوري) */}
+            <div>
+              <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1.5 flex items-center justify-between">
+                <span>نوع المعاملة والتسليم:</span>
+                <span className="text-[10px] text-[#c5834e] font-bold">
+                  {deliveryType === "فوري"
+                    ? "⚡ بيع وتقابض فوري (استلام مباشر)"
+                    : deliveryType === "توصيل"
+                    ? "🚚 طلبية شحن وتوصيل للزبون"
+                    : "⏳ حجز بضاعة / استلام مؤجل"}
+                </span>
+              </label>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setDeliveryType("فوري");
+                    setDeliveryFee(0);
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    deliveryType === "فوري"
+                      ? "bg-[#c5834e] text-white shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-bolt text-[10px]"></i>
+                  <span>بيع فوري</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setDeliveryType("توصيل");
+                    setEnableCustomerData(true);
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    deliveryType === "توصيل"
+                      ? "bg-[#c5834e] text-white shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-truck text-[10px]"></i>
+                  <span>توصيل</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setDeliveryType("مؤجل");
+                    setEnableCustomerData(true);
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    deliveryType === "مؤجل"
+                      ? "bg-[#c5834e] text-white shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-clock text-[10px]"></i>
+                  <span>مؤجل</span>
+                </button>
+              </div>
+            </div>
+
             {/* Customer Data Entry Toggle Switch */}
             <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800/80 transition-all">
               <div className="flex items-center gap-2">
@@ -391,17 +470,17 @@ export const PosCashier: React.FC<PosCashierProps> = ({
             </AnimatePresence>
 
             <div>
-              <label className="block text-[10px] text-slate-500 font-bold mb-1">طريقة الدفع</label>
+              <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1">طريقة الدفع</label>
               <select
                 value={payMethod}
                 onChange={(e) => setPayMethod(e.target.value)}
                 className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#c5834e]"
               >
-                <option value="كاش">كاش نقدي</option>
-                <option value="مصراتي">خدمة مصراتي</option>
-                <option value="سداد">خدمة سداد</option>
-                <option value="تداول">خدمة تداول</option>
-                <option value="بطاقة">بطاقة مصرفية</option>
+                <option value="كاش">كاش</option>
+                <option value="خدمات سداد">خدمات سداد</option>
+                <option value="خدمات تداول">خدمات تداول</option>
+                <option value="بطاقة مصرفية">بطاقة مصرفية</option>
+                <option value="حوالة مصرفية">حوالة مصرفية</option>
               </select>
             </div>
 

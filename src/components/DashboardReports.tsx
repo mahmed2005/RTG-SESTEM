@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Order } from "../types";
 import { soundFx } from "../services/soundEffects";
+import { printService } from "../services/printHelper";
+import { MonthlyFinancialReportModal } from "./MonthlyFinancialReportModal";
 import { motion } from "motion/react";
 
 interface DashboardReportsProps {
@@ -8,6 +10,7 @@ interface DashboardReportsProps {
 }
 
 export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) => {
+  const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   let totalGrossSales = 0;
   let totalNetSales = 0;
   let totalProfit = 0;
@@ -93,11 +96,6 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
 
   const handleExportFinancialPDF = () => {
     soundFx.playSuccess();
-    const printWin = window.open("", "_blank", "width=850,height=900");
-    if (!printWin) {
-      window.print();
-      return;
-    }
 
     const todayDate = new Date().toLocaleDateString("ar-LY", {
       year: "numeric",
@@ -121,7 +119,7 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
       })
       .join("");
 
-    printWin.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
@@ -145,16 +143,9 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
           table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
           th { background: #f1f5f9; color: #0f172a; padding: 8px 12px; border: 1px solid #cbd5e1; text-align: right; }
           .footer { margin-top: 30px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 12px; font-size: 11px; color: #64748b; }
-          .btn-print { background: #a6632f; color: #fff; padding: 8px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 16px; }
-          @media print {
-            .btn-print { display: none !important; }
-          }
         </style>
       </head>
       <body>
-        <div style="text-align: left;">
-          <button class="btn-print" onclick="window.print()">طباعة / حفظ بتنسيق PDF</button>
-        </div>
         <div class="header">
           <div class="title">RTG-SYSTEM — التقرير المالي الشامل</div>
           <div class="subtitle">منظومة إدارة المبيعات والمخازن السحابية</div>
@@ -205,21 +196,19 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
         <div class="footer">
           تم إنشاء هذا التقرير تلقائياً بواسطة RTG-SYSTEM السحابية • دعم: 0934590635
         </div>
-
-        <script>
-          window.onload = function() {
-            setTimeout(function() { window.print(); }, 300);
-          };
-        </script>
       </body>
       </html>
-    `);
-    printWin.document.close();
+    `;
+
+    printService.showDocument({
+      title: "التقرير المالي والمبيعات - RTG-SYSTEM",
+      html,
+    });
   };
 
   return (
     <div className="space-y-5 animate-fadeInUp">
-      {/* Action Bar with PDF Export */}
+      {/* Action Bar with PDF Export & Monthly Financial Sheet Modal */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="text-right">
           <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -230,16 +219,38 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
             حساب دقيق للأرباح الصافية بعد تصفير المرتجعات واحتساب تكلفة السلع
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleExportFinancialPDF}
-          className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-[#c5834e]/20 shrink-0"
-        >
-          <i className="fa-solid fa-file-pdf"></i>
-          <span>تصدير التقرير المالي الشامل (PDF)</span>
-        </motion.button>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              soundFx.playClick();
+              setShowMonthlyReport(true);
+            }}
+            className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-slate-900 dark:text-white bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm shrink-0"
+          >
+            <i className="fa-solid fa-table-list text-amber-600 dark:text-amber-400"></i>
+            <span>كشف الحساب الشهري الشامل (جدول المبيعات)</span>
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleExportFinancialPDF}
+            className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-[#c5834e]/20 shrink-0"
+          >
+            <i className="fa-solid fa-file-pdf"></i>
+            <span>تصدير التقرير المالي (PDF)</span>
+          </motion.button>
+        </div>
       </div>
+
+      {/* Monthly Report Modal Render */}
+      {showMonthlyReport && (
+        <MonthlyFinancialReportModal
+          orders={orders}
+          onClose={() => setShowMonthlyReport(false)}
+        />
+      )}
 
       {/* Financial Return Guarantee Banner */}
       <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3.5 text-right flex items-start gap-3">

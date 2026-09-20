@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Product, ProductsMap } from "../types";
 import { soundFx } from "../services/soundEffects";
+import { printService } from "../services/printHelper";
 
 interface InventoryManagerProps {
   products: ProductsMap;
@@ -305,11 +306,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   // Export Comprehensive Inventory PDF
   const handleExportInventoryPDF = () => {
     soundFx.playSuccess();
-    const printWin = window.open("", "_blank", "width=920,height=900");
-    if (!printWin) {
-      window.print();
-      return;
-    }
 
     const todayDate = new Date().toLocaleDateString("ar-LY", {
       year: "numeric",
@@ -380,7 +376,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       })
       .join("");
 
-    printWin.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
@@ -403,16 +399,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
           th { background: #f1f5f9; color: #0f172a; padding: 7px 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: 900; }
           .footer { margin-top: 24px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 10px; font-size: 11px; color: #64748b; }
-          .btn-print { background: #a6632f; color: #fff; padding: 8px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 12px; }
-          @media print {
-            .btn-print { display: none !important; }
-          }
         </style>
       </head>
       <body>
-        <div style="text-align: left;">
-          <button class="btn-print" onclick="window.print()">طباعة / حفظ بتنسيق PDF</button>
-        </div>
         <div class="header">
           <div class="title">${shopName} — تقرير جرد المخزون الشامل</div>
           <div class="subtitle">بيان تفصيلي بأسعار التكلفة وسعر البيع والقيمة السوقية للمخزن</div>
@@ -484,9 +473,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
       </body>
       </html>
-    `);
-    printWin.document.close();
-    showToast("✓ تم فتح تقرير جرد المخزون الشامل بتنسيق PDF بنجاح", "success");
+    `;
+
+    printService.showDocument({
+      title: `تقرير جرد المخزون الشامل - ${shopName}`,
+      html,
+    });
+    showToast("✓ تم فتح تقرير جرد المخزون الشامل بنجاح", "success");
   };
 
   // Print Barcode Sticker (Thermal & Sheets)
@@ -494,12 +487,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     const item = products[code];
     if (!item) return;
     soundFx.playCashRegister();
-
-    const printWin = window.open("", "_blank", "width=500,height=600");
-    if (!printWin) {
-      window.print();
-      return;
-    }
 
     const count = Math.max(1, copiesCount || 1);
     const labelsHtml = Array.from({ length: count })
@@ -550,7 +537,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       )
       .join("");
 
-    printWin.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
@@ -616,49 +603,24 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             border-top: 1px solid #e2e8f0;
             padding-top: 1px;
           }
-          .no-print-bar {
-            text-align: center;
-            padding: 10px;
-            margin-bottom: 10px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-          }
-          .btn-action {
-            background: #c57b42;
-            color: #fff;
-            padding: 7px 18px;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: bold;
-            cursor: pointer;
-          }
           @media print {
             body { padding: 0 !important; }
-            .no-print-bar { display: none !important; }
             .label-item { border: none !important; margin: 0 auto; }
           }
         </style>
       </head>
       <body>
-        <div class="no-print-bar">
-          <button class="btn-action" onclick="window.print()">🖨️ بدء طباعة الملصقات (${count} ملصق)</button>
-        </div>
         <div class="labels-container">
           ${labelsHtml}
         </div>
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-            }, 300);
-          };
-        </script>
       </body>
       </html>
-    `);
-    printWin.document.close();
+    `;
+
+    printService.showDocument({
+      title: `ملصق باركود - ${item.name}`,
+      html,
+    });
     showToast(`✓ تم فتح أمر طباعة ملصق "${item.name}" (${count} ملصق) بنجاح`, "success");
   };
 

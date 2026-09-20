@@ -29,6 +29,7 @@ export interface Order {
   cPhone: string;
   cBackup?: string;
   cArea?: string;
+  deliveryType?: "فوري" | "توصيل" | "مؤجل";
   returnNote?: string;
   cartItems?: CartItem[];
 }

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Order } from "../types";
 import { RtgLogo } from "./RtgLogo";
 import { soundFx } from "../services/soundEffects";
+import { printService } from "../services/printHelper";
 import { motion, AnimatePresence } from "motion/react";
 
 interface PrintModalProps {
@@ -213,13 +214,10 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
 
   const handleExportPDF = () => {
     soundFx.playSuccess();
-    const printWin = window.open("", "_blank", "width=600,height=800");
-    if (printWin) {
-      printWin.document.write(getPrintableHtml());
-      printWin.document.close();
-    } else {
-      handlePrint();
-    }
+    printService.showDocument({
+      title: `فاتورة مبيعات #${order.id}`,
+      html: getPrintableHtml(),
+    });
   };
 
   const handleCopyCode = () => {
