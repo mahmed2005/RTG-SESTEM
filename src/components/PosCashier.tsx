@@ -121,7 +121,14 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     });
 
     const invoiceId = "INV-" + Date.now().toString().slice(-6);
-    const dateStr = new Date().toLocaleString("ar-LY", { hour12: false });
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+    const dateStr = `${y}/${m}/${d} ${hh}:${mm}:${ss}`;
 
     // Update inventory stocks immediately
     const updatedProducts: ProductsMap = { ...products };

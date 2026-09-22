@@ -4,36 +4,45 @@ import { soundFx } from "../services/soundEffects";
 import { printService } from "../services/printHelper";
 import { motion, AnimatePresence } from "motion/react";
 
+// Helper to convert Arabic-Indic numerals (٠-٩) to Western (0-9)
+function toStandardDigits(str: string): string {
+  if (!str) return "";
+  return str.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+}
+
 interface MonthlyFinancialReportModalProps {
   orders: Order[];
   shopName?: string;
   onClose: () => void;
+  onRefreshOrders?: () => void;
 }
 
 export const MonthlyFinancialReportModal: React.FC<MonthlyFinancialReportModalProps> = ({
   orders,
   shopName = "RTG-GEARX",
   onClose,
+  onRefreshOrders,
 }) => {
   // Current month string format: YYYY-MM
   const now = new Date();
   const currentMonthDefault = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  // Find all available months in orders
+  // Find all available months in orders, ensuring current month is always available and sorted
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     monthsSet.add(currentMonthDefault);
 
     orders.forEach((o) => {
       if (o.date) {
+        const normalized = toStandardDigits(o.date);
         // Try extracting YYYY-MM or parse Date
-        const match = o.date.match(/(\d{4})[/-](\d{1,2})/);
+        const match = normalized.match(/(\d{4})[/-](\d{1,2})/);
         if (match) {
           const y = match[1];
           const m = match[2].padStart(2, "0");
           monthsSet.add(`${y}-${m}`);
         } else {
-          const d = new Date(o.date);
+          const d = new Date(normalized);
           if (!isNaN(d.getTime())) {
             monthsSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
           }
@@ -44,7 +53,44 @@ export const MonthlyFinancialReportModal: React.FC<MonthlyFinancialReportModalPr
     return Array.from(monthsSet).sort().reverse();
   }, [orders, currentMonthDefault]);
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(availableMonths[0] || currentMonthDefault);
+  // Selected month ALWAYS defaults strictly to the current active month
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthDefault);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Month label formatter with Arabic names
+  const formatMonthLabel = (mStr: string) => {
+    const [y, m] = mStr.split("-");
+    const monthNum = parseInt(m, 10);
+    const arabicMonths = [
+      "يناير (شهر 1)",
+      "فبراير (شهر 2)",
+      "مارس (شهر 3)",
+      "أبريل (شهر 4)",
+      "مايو (شهر 5)",
+      "يونيو (شهر 6)",
+      "يوليو (شهر 7)",
+      "أغسطس (شهر 8)",
+      "سبتمبر (شهر 9)",
+      "أكتوبر (شهر 10)",
+      "نوفمبر (شهر 11)",
+      "ديسمبر (شهر 12)",
+    ];
+    const name = arabicMonths[monthNum - 1] || `شهر ${m}`;
+    const isCurrent = mStr === currentMonthDefault;
+    return `${y} — ${name}${isCurrent ? " ⚡ (الشهر الحالي)" : ""}`;
+  };
+
+  const handleQuickRefresh = () => {
+    soundFx.playClick();
+    setIsRefreshing(true);
+    if (onRefreshOrders) {
+      onRefreshOrders();
+    }
+    setTimeout(() => {
+      setIsRefreshing(false);
+      soundFx.playSuccess();
+    }, 700);
+  };
 
   // Capital at beginning of month (stored in localStorage per month)
   const capitalStorageKey = `rtg_capital_${selectedMonth}`;
@@ -84,16 +130,24 @@ export const MonthlyFinancialReportModal: React.FC<MonthlyFinancialReportModalPr
   const monthOrders = useMemo(() => {
     return orders.filter((o) => {
       if (!o.date) return false;
-      // Match against year and month
-      const match = o.date.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+      const normalized = toStandardDigits(o.date).trim();
+      // Match against year and month (YYYY/MM/DD or DD/MM/YYYY)
+      const match = normalized.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
       if (match) {
         return parseInt(match[1], 10) === year && parseInt(match[2], 10) === month;
       }
-      const d = new Date(o.date);
+      const matchDMY = normalized.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+      if (matchDMY) {
+        return parseInt(matchDMY[3], 10) === year && parseInt(matchDMY[2], 10) === month;
+      }
+      const d = new Date(normalized);
       if (!isNaN(d.getTime())) {
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       }
-      return o.date.includes(`${year}/${monthStr}`) || o.date.includes(`${year}-${monthStr}`);
+      return (
+        normalized.includes(`${year}/${monthStr}`) ||
+        normalized.includes(`${year}-${monthStr}`)
+      );
     });
   }, [orders, year, month, monthStr]);
 
@@ -517,23 +571,68 @@ export const MonthlyFinancialReportModal: React.FC<MonthlyFinancialReportModalPr
               </div>
             </div>
 
-            {/* Controls: Month selector, Capital, Export Buttons */}
+            {/* Controls: Month selector, Capital, Quick Refresh, Export Buttons */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Quick Refresh Button for Current Month Data */}
+              <button
+                type="button"
+                onClick={handleQuickRefresh}
+                disabled={isRefreshing}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isRefreshing
+                    ? "bg-[#c5834e]/20 text-[#c5834e] border-[#c5834e]/40"
+                    : "bg-slate-100 dark:bg-[#1c222c] hover:bg-[#c5834e]/10 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#2c323f]"
+                }`}
+                title="تحديث وإعادة احتساب مبيعات الشهر الحالي فوراً"
+              >
+                <i
+                  className={`fa-solid fa-arrows-rotate text-[#c5834e] ${
+                    isRefreshing ? "animate-spin" : ""
+                  }`}
+                ></i>
+                <span className="hidden sm:inline">ريفريش سريع</span>
+              </button>
+
+              {/* Month Selector Dropdown */}
               <div className="flex items-center gap-1.5 bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-xl px-2.5 py-1.5 text-xs">
                 <i className="fa-regular fa-calendar text-[#c5834e]"></i>
                 <select
                   value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-transparent text-slate-800 dark:text-white font-bold outline-none cursor-pointer"
+                  onChange={(e) => {
+                    soundFx.playClick();
+                    setSelectedMonth(e.target.value);
+                  }}
+                  className="bg-transparent text-slate-800 dark:text-white font-bold outline-none cursor-pointer max-w-[200px]"
                 >
                   {availableMonths.map((m) => (
-                    <option key={m} value={m} className="bg-white dark:bg-[#121418] text-slate-900 dark:text-white">
-                      شهر {m}
+                    <option
+                      key={m}
+                      value={m}
+                      className="bg-white dark:bg-[#121418] text-slate-900 dark:text-white"
+                    >
+                      {formatMonthLabel(m)}
                     </option>
                   ))}
                 </select>
               </div>
 
+              {/* Snap Back to Current Month Button if looking at past months */}
+              {selectedMonth !== currentMonthDefault && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setSelectedMonth(currentMonthDefault);
+                  }}
+                  className="px-2.5 py-1.5 bg-[#c5834e]/15 hover:bg-[#c5834e]/25 text-[#c5834e] border border-[#c5834e]/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 animate-pulse"
+                  title="الرجوع إلى الشهر الحالي فوراً"
+                >
+                  <i className="fa-solid fa-bolt"></i>
+                  <span>الشهر الحالي</span>
+                </button>
+              )}
+
+              {/* Capital Input */}
               <div className="flex items-center gap-1.5 bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-xl px-2.5 py-1.5 text-xs">
                 <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold">رأس المال:</span>
                 <input
@@ -546,27 +645,47 @@ export const MonthlyFinancialReportModal: React.FC<MonthlyFinancialReportModalPr
                 <span className="text-[10px] text-slate-400">د.ل</span>
               </div>
 
+              {/* Primary PDF & Print Viewer */}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handlePrint}
                 className="px-3 py-1.5 bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-[#c5834e]/20 cursor-pointer"
-                title="طباعة أو تصدير PDF يشتغل 100% على الهاتف والكمبيوتر"
+                title="معاينة وطباعة وتصدير تقرير PDF متوافق 100% مع الهاتف والكمبيوتر"
               >
                 <i className="fa-solid fa-file-pdf"></i>
-                <span>طباعة / PDF</span>
+                <span>تقرير PDF</span>
               </motion.button>
 
+              {/* Direct Print Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  soundFx.playClick();
+                  handlePrint();
+                  setTimeout(() => {
+                    printService.triggerNativePrint();
+                  }, 250);
+                }}
+                className="px-2.5 py-1.5 bg-slate-100 dark:bg-[#1f242e] hover:bg-slate-200 dark:hover:bg-[#28303e] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#2c323f] rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                title="طباعة ورقية مباشرة"
+              >
+                <i className="fa-solid fa-print text-slate-500"></i>
+                <span className="hidden lg:inline">طباعة عادية</span>
+              </button>
+
+              {/* Excel / CSV Export */}
               <button
                 type="button"
                 onClick={handleExportCSV}
                 className="px-2.5 py-1.5 bg-slate-200 dark:bg-[#222731] hover:bg-slate-300 dark:hover:bg-[#2b323f] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                title="تصدير ملف إكسل"
+                title="تصدير ملف إكسل CSV"
               >
                 <i className="fa-solid fa-file-excel text-emerald-600"></i>
-                <span className="hidden md:inline">Excel (CSV)</span>
+                <span className="hidden md:inline">Excel</span>
               </button>
 
+              {/* Close Button */}
               <button
                 type="button"
                 onClick={onClose}

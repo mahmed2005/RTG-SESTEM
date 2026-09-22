@@ -493,3 +493,34 @@ export async function cloudTestMasterConnection(
   }
 }
 
+/**
+ * Directly fetch or verify admin password from central master sheet
+ */
+export async function cloudFetchMasterAdminPassword(
+  masterScriptUrl: string
+): Promise<string | null> {
+  const { url: cleanUrl } = normalizeScriptUrl(masterScriptUrl);
+  if (!cleanUrl) return null;
+
+  try {
+    // 1. Try verifyAdminPassword lightweight action
+    const verifyRes = await fetchCloudData<{
+      success?: boolean;
+      adminPassword?: string;
+    }>(cleanUrl, "verifyAdminPassword");
+
+    if (verifyRes && verifyRes.adminPassword) {
+      return String(verifyRes.adminPassword).trim();
+    }
+
+    // 2. Fallback to getMasterConfig
+    const config = await cloudGetMasterConfig(cleanUrl);
+    if (config?.settings?.adminPassword) {
+      return String(config.settings.adminPassword).trim();
+    }
+  } catch {}
+
+  return null;
+}
+
+

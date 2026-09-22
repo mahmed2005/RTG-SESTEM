@@ -7,9 +7,15 @@ import { motion } from "motion/react";
 
 interface DashboardReportsProps {
   orders: Order[];
+  shopName?: string;
+  onRefreshOrders?: () => void;
 }
 
-export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) => {
+export const DashboardReports: React.FC<DashboardReportsProps> = ({
+  orders,
+  shopName,
+  onRefreshOrders,
+}) => {
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   let totalGrossSales = 0;
   let totalNetSales = 0;
@@ -248,6 +254,8 @@ export const DashboardReports: React.FC<DashboardReportsProps> = ({ orders }) =>
       {showMonthlyReport && (
         <MonthlyFinancialReportModal
           orders={orders}
+          shopName={shopName}
+          onRefreshOrders={onRefreshOrders}
           onClose={() => setShowMonthlyReport(false)}
         />
       )}

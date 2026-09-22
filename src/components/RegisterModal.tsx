@@ -1,23 +1,57 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { SubscriptionPlan } from "../types";
+import { loadSubscriptionPlans } from "../data/initialStores";
 
 interface RegisterModalProps {
   isOpen: boolean;
   onClose: () => void;
   showToast: (msg: string, type?: "success" | "error" | "info") => void;
+  subscriptionPlans?: SubscriptionPlan[];
 }
 
 export const RegisterModal: React.FC<RegisterModalProps> = ({
   isOpen,
   onClose,
   showToast,
+  subscriptionPlans,
 }) => {
   const [shopName, setShopName] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
-  const [plan, setPlan] = useState("مجاني - شهر (0 د.ل)");
   const [note, setNote] = useState("");
+
+  // Get active subscription plans dynamically from props or local storage
+  const activePlans = useMemo(() => {
+    const list =
+      subscriptionPlans && subscriptionPlans.length > 0
+        ? subscriptionPlans
+        : loadSubscriptionPlans();
+    return list.filter((p) => p.isActive !== false);
+  }, [subscriptionPlans]);
+
+  // Selected plan name + price
+  const [plan, setPlan] = useState(() => {
+    if (activePlans.length > 0) {
+      const p = activePlans[0];
+      return `${p.name} (${p.price} د.ل)`;
+    }
+    return "باقة المتجر الأساسية";
+  });
+
+  // Keep plan updated if active plans change and current selection is not among them
+  useEffect(() => {
+    if (activePlans.length > 0) {
+      const exists = activePlans.some(
+        (p) => `${p.name} (${p.price} د.ل)` === plan || p.name === plan
+      );
+      if (!exists) {
+        const p = activePlans[0];
+        setPlan(`${p.name} (${p.price} د.ل)`);
+      }
+    }
+  }, [activePlans, plan]);
 
   if (!isOpen) return null;
 
@@ -139,15 +173,25 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-[10px] text-slate-400 font-bold mb-1">اختر الباقة</label>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1">
+              اختر الباقة ({activePlans.length} باقة متاحة)
+            </label>
             <select
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
               className="w-full px-3 py-2.5 bg-[#181c22] border border-[#2c323f] rounded-xl text-white text-sm outline-none focus:border-[#c5834e]"
             >
-              <option value="مجاني - شهر (0 د.ل)">⚡ مجاني — أول شهر (0 د.ل)</option>
-              <option value="شهرين (75 د.ل)">🚀 شهرين (75 د.ل) — الأكثر طلباً</option>
-              <option value="سنوي (250 د.ل)">💎 سنوي (250 د.ل) — الأوفر</option>
+              {activePlans.length > 0 ? (
+                activePlans.map((p) => (
+                  <option key={p.id} value={`${p.name} (${p.price} د.ل)`}>
+                    {p.name} — {p.price} د.ل {p.badge ? `(${p.badge})` : ""}
+                  </option>
+                ))
+              ) : (
+                <option value="اشتراك المنظومة (60 د.ل)">
+                  اشتراك المنظومة — 60 د.ل
+                </option>
+              )}
             </select>
           </div>
 

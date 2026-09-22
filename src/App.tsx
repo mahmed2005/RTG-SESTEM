@@ -111,6 +111,10 @@ export default function App() {
             setSystemCodeState(config.settings.systemCode);
             setSystemCode(config.settings.systemCode);
           }
+          if (config?.settings?.adminPassword) {
+            setAdminPassword(config.settings.adminPassword);
+            saveAdminPassword(config.settings.adminPassword);
+          }
         })
         .catch(() => {});
     }
@@ -1350,7 +1354,13 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === "dashboard" && <DashboardReports orders={orders} />}
+                  {activeTab === "dashboard" && (
+                    <DashboardReports
+                      orders={orders}
+                      shopName={shopName || "RTG-GEARX"}
+                      onRefreshOrders={() => triggerInstantCloudSync(100)}
+                    />
+                  )}
 
                   {activeTab === "debts" && (
                     <DebtsTracker
@@ -1388,6 +1398,8 @@ export default function App() {
           setScreen("admin");
         }}
         adminPassword={adminPassword}
+        masterScriptUrl={masterScriptUrl}
+        onUpdateAdminPassword={handleChangeAdminPassword}
         showToast={showToast}
       />
 
@@ -1395,6 +1407,7 @@ export default function App() {
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
         showToast={showToast}
+        subscriptionPlans={subscriptionPlans}
       />
 
       <PrintModal

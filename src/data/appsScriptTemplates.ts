@@ -170,6 +170,20 @@ function doGet(e) {
       return respondOutput({ success: true, plans: allPlans }, callback);
     }
 
+    // التحقق المباشر من كلمة مرور الأدمن ومطابقتها مركزياً من جوجل شيت
+    if (action === "verifyAdminPassword" || action === "checkAdminPassword") {
+      var passToCheck = (params.password || params.adminPassword || "").toString().trim();
+      var currentSettings = readSettingsSheet(ss);
+      var currentPass = (currentSettings.adminPassword || "rtg@admin2025").toString().trim();
+      var isMatch = Boolean(passToCheck && passToCheck === currentPass);
+      return respondOutput({
+        success: true,
+        matched: isMatch,
+        adminPassword: currentPass,
+        settings: currentSettings
+      }, callback);
+    }
+
     // 5. حفظ وتحديث الإعدادات ورابط الخادم عبر GET (للتوافق المباشر)
     if (action === "updateSettings" || action === "saveSettings") {
       var newUrl = params.masterScriptUrl || params.url;

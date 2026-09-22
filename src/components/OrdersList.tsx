@@ -11,6 +11,106 @@ interface OrdersListProps {
   onOpenPrintModal: (order: Order) => void;
 }
 
+// Helper to convert Arabic-Indic numerals (٠-٩) to Western (0-9)
+function toStandardDigits(str: string): string {
+  if (!str) return "";
+  return str.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+}
+
+// Robust timestamp parser for sorting newest-first across all locales and date formats
+function parseOrderTimestamp(order: Order): number {
+  if (!order) return 0;
+  const rawDate = toStandardDigits(order.date || "").trim();
+
+  if (rawDate) {
+    // 1. Pattern: YYYY/MM/DD or YYYY-MM-DD (with optional HH:mm:ss)
+    const matchYMD = rawDate.match(
+      /(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/
+    );
+    if (matchYMD) {
+      const y = parseInt(matchYMD[1], 10);
+      const m = parseInt(matchYMD[2], 10) - 1;
+      const day = parseInt(matchYMD[3], 10);
+      const hh = matchYMD[4] ? parseInt(matchYMD[4], 10) : 0;
+      const mm = matchYMD[5] ? parseInt(matchYMD[5], 10) : 0;
+      const ss = matchYMD[6] ? parseInt(matchYMD[6], 10) : 0;
+      return new Date(y, m, day, hh, mm, ss).getTime();
+    }
+
+    // 2. Pattern: DD/MM/YYYY or DD-MM-YYYY (with optional HH:mm:ss)
+    const matchDMY = rawDate.match(
+      /(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/
+    );
+    if (matchDMY) {
+      const day = parseInt(matchDMY[1], 10);
+      const m = parseInt(matchDMY[2], 10) - 1;
+      const y = parseInt(matchDMY[3], 10);
+      const hh = matchDMY[4] ? parseInt(matchDMY[4], 10) : 0;
+      const mm = matchDMY[5] ? parseInt(matchDMY[5], 10) : 0;
+      const ss = matchDMY[6] ? parseInt(matchDMY[6], 10) : 0;
+      return new Date(y, m, day, hh, mm, ss).getTime();
+    }
+
+    // 3. Try standard Date constructor
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      return d.getTime();
+    }
+  }
+
+  // 4. Fallback to order numeric ID
+  const idDigits = (order.id || "").replace(/\D/g, "");
+  if (idDigits) {
+    return parseInt(idDigits, 10);
+  }
+
+  return 0;
+}
+
+// Robust matcher for Date Picker (YYYY-MM-DD) against invoice date
+function matchesDateFilter(orderDateRaw: string, filterStr: string): boolean {
+  if (!filterStr) return true;
+  if (!orderDateRaw) return false;
+
+  const normalized = toStandardDigits(orderDateRaw).trim();
+  const [fYear, fMonth, fDay] = filterStr.split("-").map((n) => parseInt(n, 10));
+
+  // Match YYYY/MM/DD or YYYY-MM-DD
+  const matchYMD = normalized.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+  if (matchYMD) {
+    const oYear = parseInt(matchYMD[1], 10);
+    const oMonth = parseInt(matchYMD[2], 10);
+    const oDay = parseInt(matchYMD[3], 10);
+    if (oMonth === fMonth && oDay === fDay) {
+      if (!fYear || oYear === fYear) return true;
+    }
+    return false;
+  }
+
+  // Match DD/MM/YYYY or DD-MM-YYYY
+  const matchDMY = normalized.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (matchDMY) {
+    const oDay = parseInt(matchDMY[1], 10);
+    const oMonth = parseInt(matchDMY[2], 10);
+    const oYear = parseInt(matchDMY[3], 10);
+    if (oMonth === fMonth && oDay === fDay) {
+      if (!fYear || oYear === fYear) return true;
+    }
+    return false;
+  }
+
+  // Try Date constructor
+  const d = new Date(normalized);
+  if (!isNaN(d.getTime())) {
+    return d.getFullYear() === fYear && d.getMonth() + 1 === fMonth && d.getDate() === fDay;
+  }
+
+  // Substring fallback
+  const dPart = `${fMonth}/${fDay}`;
+  const dPartPadded = `${String(fMonth).padStart(2, "0")}/${String(fDay).padStart(2, "0")}`;
+  return normalized.includes(filterStr) || normalized.includes(dPart) || normalized.includes(dPartPadded);
+}
+
 export const OrdersList: React.FC<OrdersListProps> = ({
   orders,
   onUpdateStatus,
@@ -22,22 +122,12 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   const [methodFilter, setMethodFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
 
-  // Sort orders newest-first
+  // Sort orders newest-first strictly across all states and categories
   const sortedOrders = useMemo(() => {
     return [...orders].sort((a, b) => {
-      const parseTime = (dateStr: string) => {
-        if (!dateStr) return 0;
-        const d = new Date(dateStr);
-        if (!isNaN(d.getTime())) return d.getTime();
-        const match = dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
-        if (match) {
-          return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3])).getTime();
-        }
-        return 0;
-      };
-      const tA = parseTime(a.date);
-      const tB = parseTime(b.date);
-      if (tA !== tB && tA > 0 && tB > 0) return tB - tA;
+      const tA = parseOrderTimestamp(a);
+      const tB = parseOrderTimestamp(b);
+      if (tA !== tB) return tB - tA;
 
       return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
     });
@@ -63,8 +153,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     }
     if (methodFilter && o.method !== methodFilter && !o.method.includes(methodFilter)) return false;
     if (dateFilter) {
-      const orderDate = typeof o.date === "string" ? o.date.substring(0, 10) : "";
-      if (!orderDate.includes(dateFilter)) return false;
+      if (!matchesDateFilter(o.date, dateFilter)) return false;
     }
     return true;
   });
@@ -314,15 +403,31 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             <option value="حوالة">حوالة مصرفية</option>
           </select>
 
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => {
-              soundFx.playClick();
-              setDateFilter(e.target.value);
-            }}
-            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none focus:border-[#c5834e]"
-          />
+          <div className="relative flex items-center">
+            <input
+              type="date"
+              value={dateFilter}
+              title="فلترة الفواتير بالتاريخ (يوم/شهر/سنة)"
+              onChange={(e) => {
+                soundFx.playClick();
+                setDateFilter(e.target.value);
+              }}
+              className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none focus:border-[#c5834e] cursor-pointer"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  soundFx.playClick();
+                  setDateFilter("");
+                }}
+                title="مسح فلتر التاريخ وإظهار الكل"
+                className="mr-1.5 px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-bold rounded-lg border border-rose-500/30 transition-all cursor-pointer flex items-center gap-1"
+              >
+                <i className="fa-solid fa-xmark"></i> مسح
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
