@@ -1,7 +1,9 @@
-import React, { useState } from "react";
-import { ProductsMap, CartItem, Order } from "../types";
+import React, { useState, useMemo } from "react";
+import { ProductsMap, CartItem, Order, UserSession } from "../types";
 import { soundFx } from "../services/soundEffects";
 import { motion, AnimatePresence } from "motion/react";
+import { ShareModal } from "./ShareModal";
+import { generateOrderShareText, isTodayOrder, isOrderBelongsToUser } from "../services/shareHelper";
 
 interface PosCashierProps {
   products: ProductsMap;
@@ -9,6 +11,9 @@ interface PosCashierProps {
   showToast: (msg: string, type?: "success" | "error" | "info") => void;
   onOpenPrintModal: (order: Order) => void;
   cashierName?: string;
+  currentUser?: UserSession | null;
+  orders?: Order[];
+  shopName?: string;
 }
 
 export const PosCashier: React.FC<PosCashierProps> = ({
@@ -17,6 +22,9 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   showToast,
   onOpenPrintModal,
   cashierName,
+  currentUser,
+  orders = [],
+  shopName,
 }) => {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -30,6 +38,29 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [paidAmount, setPaidAmount] = useState<string>("");
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [selectedOrderToShare, setSelectedOrderToShare] = useState<Order | null>(null);
+
+  const isEmployee = currentUser?.role === "employee";
+
+  // Filter orders for TODAY ONLY and belongs to this cashier/session
+  const todayMyOrders = useMemo(() => {
+    if (!orders || orders.length === 0) return [];
+    return orders.filter((o) => {
+      if (!isTodayOrder(o.date)) return false;
+      if (isEmployee) {
+        return isOrderBelongsToUser(o, currentUser?.userTitle, currentUser?.username);
+      }
+      return true;
+    });
+  }, [orders, isEmployee, currentUser]);
+
+  const todaySalesTotal = useMemo(() => {
+    return todayMyOrders.reduce((sum, o) => {
+      const isRet = o.status === "مرتجع" || o.status === "راجع";
+      return sum + (isRet ? 0 : Number(o.total || 0));
+    }, 0);
+  }, [todayMyOrders]);
 
   const addToCart = (barcode: string) => {
     const prod = products[barcode];
@@ -188,9 +219,47 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   });
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-      {/* Products Catalog Section */}
-      <div className="lg:col-span-7 space-y-3">
+    <div className="space-y-4">
+      {/* Shift Status Bar (Showing today's cashier orders & stats) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="w-10 h-10 rounded-xl bg-[#c5834e]/15 border border-[#c5834e]/30 text-[#c5834e] flex items-center justify-center font-bold text-sm shrink-0">
+            <i className="fa-solid fa-cash-register"></i>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-800 dark:text-white">
+                {cashierName || "كاشير البيع"}
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 font-bold">
+                وردية نشطة (اليوم)
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              فواتيرك المسجلة اليوم فقط • <strong className="text-slate-700 dark:text-slate-200 font-mono">{todayMyOrders.length}</strong> فواتير • إجمالي مبيعاتك اليوم: <strong className="text-[#c5834e] font-mono">{todaySalesTotal.toFixed(2)} د.ل</strong>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              soundFx.playClick();
+              setIsShiftModalOpen(true);
+            }}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 dark:border-slate-700 shadow-xs"
+          >
+            <i className="fa-solid fa-receipt text-[#c5834e]"></i>
+            <span>فواتير وردية اليوم ({todayMyOrders.length})</span>
+          </motion.button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Products Catalog Section */}
+        <div className="lg:col-span-7 space-y-3">
         {/* Search Header */}
         <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-2">
           <div className="relative flex-1">
@@ -581,6 +650,142 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           </motion.button>
         </div>
       </div>
+    </div>
+
+      {/* Today's Shift Invoices Modal (Isolated to this cashier & today only) */}
+      <AnimatePresence>
+        {isShiftModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[85] flex items-center justify-center p-3 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+              dir="rtl"
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#181c22]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#c5834e]/15 border border-[#c5834e]/30 text-[#c5834e] flex items-center justify-center">
+                    <i className="fa-solid fa-receipt text-sm"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                      فواتير وردية اليوم ({todayMyOrders.length})
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      الكاشير: <span className="font-bold text-[#c5834e]">{cashierName}</span> • تاريخ اليوم: {new Date().toLocaleDateString("ar-LY")}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsShiftModalOpen(false)}
+                  className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <i className="fa-solid fa-xmark text-sm"></i>
+                </button>
+              </div>
+
+              {/* Stats Ribbon */}
+              <div className="grid grid-cols-2 gap-2 p-3 bg-[#c5834e]/5 border-b border-slate-100 dark:border-slate-800 text-center">
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] text-slate-500 block font-bold">عدد الفواتير المنفذة</span>
+                  <span className="text-base font-black text-slate-800 dark:text-white font-mono">
+                    {todayMyOrders.length}
+                  </span>
+                </div>
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] text-slate-500 block font-bold">إجمالي مبيعاتك</span>
+                  <span className="text-base font-black text-[#c5834e] dark:text-[#e0a36e] font-mono">
+                    {todaySalesTotal.toFixed(2)} د.ل
+                  </span>
+                </div>
+              </div>
+
+              {/* Orders List */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-slate-100 dark:divide-slate-800/60">
+                {todayMyOrders.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-xs">
+                    <i className="fa-solid fa-receipt text-3xl mb-2 block opacity-30"></i>
+                    لم تقم بصرف أي فواتير في وردية اليوم حتى الآن.
+                  </div>
+                ) : (
+                  todayMyOrders.map((o) => (
+                    <div
+                      key={o.id}
+                      className="pt-2.5 first:pt-0 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex-1 text-right">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-[#c5834e]">#{o.id}</span>
+                          <span className="text-slate-700 dark:text-slate-300 font-bold">
+                            {o.cName || "زبون نقدي"}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">{o.date}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-sm mt-0.5">
+                          {o.desc}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono font-black text-slate-900 dark:text-white text-xs">
+                          {o.total.toFixed(2)} د.ل
+                        </span>
+
+                        {/* Print Button */}
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            soundFx.playClick();
+                            onOpenPrintModal(o);
+                          }}
+                          className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer transition-colors"
+                          title="طباعة إيصال الفاتورة"
+                        >
+                          <i className="fa-solid fa-print text-xs"></i>
+                        </motion.button>
+
+                        {/* Share Button (Explicit User Request) */}
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            soundFx.playClick();
+                            setSelectedOrderToShare(o);
+                          }}
+                          className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center cursor-pointer transition-colors border border-emerald-200 dark:border-emerald-500/30"
+                          title="مشاركة الفاتورة عبر واتساب والتطبيقات"
+                        >
+                          <i className="fa-solid fa-share-nodes text-xs"></i>
+                        </motion.button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Dialog for individual order */}
+      {selectedOrderToShare && (
+        <ShareModal
+          isOpen={Boolean(selectedOrderToShare)}
+          onClose={() => setSelectedOrderToShare(null)}
+          title={`مشاركة فاتورة #${selectedOrderToShare.id}`}
+          subtitle={`المبلغ: ${selectedOrderToShare.total.toFixed(2)} د.ل • الزبون: ${selectedOrderToShare.cName || "زبون نقدي"}`}
+          shareText={generateOrderShareText(selectedOrderToShare, shopName)}
+          recipientPhone={
+            selectedOrderToShare.cPhone && selectedOrderToShare.cPhone !== "غير محدد"
+              ? selectedOrderToShare.cPhone
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 };

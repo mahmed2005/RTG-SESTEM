@@ -4,6 +4,8 @@ import { RtgLogo } from "./RtgLogo";
 import { soundFx } from "../services/soundEffects";
 import { printService } from "../services/printHelper";
 import { motion, AnimatePresence } from "motion/react";
+import { ShareModal } from "./ShareModal";
+import { generateOrderShareText } from "../services/shareHelper";
 
 interface PrintModalProps {
   order: Order | null;
@@ -74,6 +76,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSuccess, setPrintSuccess] = useState(false);
   const [printerPaperSize, setPrinterPaperSize] = useState<"80mm" | "58mm">("80mm");
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   if (!order) return null;
 
@@ -354,12 +357,12 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
                   {order.method}
                 </span>
               </div>
-              {order.cashierName && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">الكاشير / الموظف:</span>
-                  <span className="font-bold text-slate-800 text-[10px]">{order.cashierName}</span>
-                </div>
-              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">البائع / الكاشير:</span>
+                <span className="font-bold text-slate-800 text-[10px]">
+                  {order.cashierName || "المدير العام"}
+                </span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">حالة الفاتورة:</span>
                 <span
@@ -486,7 +489,21 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
                 className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
               >
                 <i className="fa-solid fa-file-pdf"></i>
-                <span>حفظ / مشاركة PDF</span>
+                <span>حفظ PDF</span>
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => {
+                  soundFx.playClick();
+                  setIsShareOpen(true);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-md shadow-emerald-600/20"
+                title="مشاركة الفاتورة عبر واتساب وتطبيقات التواصل"
+              >
+                <i className="fa-solid fa-share-nodes"></i>
+                <span>مشاركة الفاتورة</span>
               </motion.button>
             </div>
 
@@ -516,6 +533,16 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
           </div>
         </motion.div>
       </div>
+
+      {/* Share Modal Dialog for Invoice */}
+      <ShareModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        title={`مشاركة فاتورة #${order.id}`}
+        subtitle={`مبلغ الفاتورة: ${order.total.toFixed(2)} د.ل • الزبون: ${order.cName || "زبون نقدي"}`}
+        shareText={generateOrderShareText(order, shopName)}
+        recipientPhone={order.cPhone && order.cPhone !== "غير محدد" ? order.cPhone : undefined}
+      />
     </AnimatePresence>
   );
 };

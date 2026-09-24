@@ -1085,7 +1085,8 @@ function doGet(e) {
               cName: ordData[o][9] ? ordData[o][9].toString() : "",
               cPhone: ordData[o][10] ? ordData[o][10].toString() : "",
               cBackup: ordData[o][11] ? ordData[o][11].toString() : "",
-              cArea: ordData[o][12] ? ordData[o][12].toString() : ""
+              cArea: ordData[o][12] ? ordData[o][12].toString() : "",
+              cashierName: ordData[o][13] ? ordData[o][13].toString() : ""
             });
           }
         }

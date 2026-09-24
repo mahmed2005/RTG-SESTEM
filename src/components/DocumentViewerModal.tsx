@@ -2,10 +2,13 @@ import React, { useEffect, useState } from "react";
 import { printService, PrintableDocument } from "../services/printHelper";
 import { soundFx } from "../services/soundEffects";
 import { motion, AnimatePresence } from "motion/react";
+import { ShareModal } from "./ShareModal";
+import { generateDocumentShareText } from "../services/shareHelper";
 
 export const DocumentViewerModal: React.FC = () => {
   const [doc, setDoc] = useState<PrintableDocument | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   useEffect(() => {
     return printService.subscribe((currentDoc) => {
@@ -32,10 +35,17 @@ export const DocumentViewerModal: React.FC = () => {
     printService.downloadHtmlFile();
   };
 
+  const handleOpenShare = () => {
+    soundFx.playClick();
+    setIsShareOpen(true);
+  };
+
   const handleClose = () => {
     soundFx.playClick();
     printService.closeDocument();
   };
+
+  const shareText = generateDocumentShareText(doc.title, doc.html);
 
   return (
     <AnimatePresence>
@@ -58,12 +68,12 @@ export const DocumentViewerModal: React.FC = () => {
                   {doc.title}
                 </h3>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  جاهز للطباعة والحفظ كملف PDF على الهاتف والكمبيوتر
+                  جاهز للطباعة والمشاركة كملف PDF على الهاتف والكمبيوتر
                 </p>
               </div>
             </div>
 
-            {/* Actions Bar */}
+            {/* Actions Bar: Print, Share, New Tab, Download, Close */}
             <div className="flex items-center gap-1.5 shrink-0">
               <motion.button
                 whileHover={{ scale: 1.03 }}
@@ -75,7 +85,19 @@ export const DocumentViewerModal: React.FC = () => {
               >
                 <i className={`fa-solid ${isPrinting ? "fa-spinner fa-spin" : "fa-print"}`}></i>
                 <span className="hidden sm:inline">طباعة / حفظ PDF</span>
-                <span className="sm:hidden">طباعة PDF</span>
+                <span className="sm:hidden">طباعة</span>
+              </motion.button>
+
+              {/* Explicit User Request: Share button right in the top bar */}
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleOpenShare}
+                className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                title="مشاركة الفاتورة أو التقرير عبر واتساب والإنستغرام"
+              >
+                <i className="fa-solid fa-share-nodes text-xs"></i>
+                <span>مشاركة</span>
               </motion.button>
 
               <button
@@ -120,6 +142,15 @@ export const DocumentViewerModal: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Share Modal Dialog */}
+      <ShareModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        title={`مشاركة: ${doc.title}`}
+        shareText={shareText}
+        subtitle="مشاركة التقرير عبر واتساب وتطبيقات التواصل الاجتماعي"
+      />
     </AnimatePresence>
   );
 };

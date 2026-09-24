@@ -91,7 +91,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setLoading(false);
       const adminSession: UserSession = {
         role: "admin",
-        userTitle: "المالك / المدير العام",
+        userTitle: sub.username ? `${sub.username} (المالك)` : "المالك / المدير العام",
         username: sub.username,
         permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
         loginAt: new Date().toISOString(),

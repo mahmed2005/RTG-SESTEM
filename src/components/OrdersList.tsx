@@ -1,14 +1,70 @@
 import React, { useState, useMemo } from "react";
-import { Order } from "../types";
+import { Order, UserSession } from "../types";
 import { soundFx } from "../services/soundEffects";
 import { printService } from "../services/printHelper";
 import { motion } from "motion/react";
+import { ShareModal } from "./ShareModal";
+import {
+  generateOrderShareText,
+  isTodayOrder,
+  isOrderBelongsToUser,
+} from "../services/shareHelper";
 
 interface OrdersListProps {
   orders: Order[];
   onUpdateStatus: (orderId: string, nextStatus: string) => void;
   onTriggerReturn: (orderId: string) => void;
   onOpenPrintModal: (order: Order) => void;
+  currentUser?: UserSession | null;
+  shopName?: string;
+}
+
+function generateOrdersReportText(
+  filteredOrders: Order[],
+  shopName: string,
+  userTitle?: string
+): string {
+  const now = new Date().toLocaleDateString("ar-LY");
+  let totalSales = 0;
+  let totalProfit = 0;
+  let validCount = 0;
+  let returnCount = 0;
+
+  filteredOrders.forEach((o) => {
+    const isRet = o.status === "مرتجع" || o.status === "راجع";
+    if (isRet) {
+      returnCount++;
+    } else {
+      totalSales += Number(o.total || 0);
+      totalProfit += Number(o.profit || 0);
+      validCount++;
+    }
+  });
+
+  let text = `📊 *تقرير كشف فواتير المبيعات*\n`;
+  text += `🏪 *المتجر:* ${shopName}\n`;
+  if (userTitle) {
+    text += `👤 *المشرف / البائع:* ${userTitle}\n`;
+  }
+  text += `📅 *التاريخ:* ${now}\n`;
+  text += `───────────────────\n`;
+  text += `🧾 *إجمالي عدد الفواتير:* ${filteredOrders.length} (${validCount} ناجحة • ${returnCount} مرتجعة)\n`;
+  text += `💰 *إجمالي المبيعات:* ${totalSales.toFixed(2)} د.ل\n`;
+  text += `📈 *صافي الأرباح:* ${totalProfit.toFixed(2)} د.ل\n`;
+  text += `───────────────────\n`;
+  text += `📋 *أبرز الفواتير:*\n`;
+
+  filteredOrders.slice(0, 10).forEach((o, idx) => {
+    const isRet = o.status === "مرتجع" || o.status === "راجع";
+    text += `${idx + 1}. #${o.id} - ${o.cName || "زبون نقدي"} | ${o.total.toFixed(2)} د.ل ${isRet ? "(مرتجع)" : `[${o.status || "مكتملة"}]`}${o.cashierName ? ` (بواسطة: ${o.cashierName})` : ""}\n`;
+  });
+
+  if (filteredOrders.length > 10) {
+    text += `... والمزيد (${filteredOrders.length - 10} فاتورة أخرى)\n`;
+  }
+  text += `───────────────────\n`;
+  text += `✨ تم تصدير التقرير عبر منظومة RTG-SYSTEM`;
+  return text;
 }
 
 // Helper to convert Arabic-Indic numerals (٠-٩) to Western (0-9)
