@@ -8,6 +8,7 @@ interface PosCashierProps {
   onOrderCreated: (order: Order, updatedProducts: ProductsMap) => void;
   showToast: (msg: string, type?: "success" | "error" | "info") => void;
   onOpenPrintModal: (order: Order) => void;
+  cashierName?: string;
 }
 
 export const PosCashier: React.FC<PosCashierProps> = ({
@@ -15,6 +16,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   onOrderCreated,
   showToast,
   onOpenPrintModal,
+  cashierName,
 }) => {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -169,6 +171,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       cBackup: enableCustomerData ? customerBackupPhone.trim() : "",
       cArea: enableCustomerData && customerArea.trim() ? customerArea.trim() : defaultArea,
       cartItems: [...cart],
+      cashierName: cashierName || "المدير العام",
     };
 
     onOrderCreated(newOrder, updatedProducts);

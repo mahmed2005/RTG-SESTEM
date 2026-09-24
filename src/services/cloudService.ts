@@ -3,7 +3,7 @@
  * Handles two-way real-time communication between RTG-SESTEM and Google Apps Script Web Apps
  */
 
-import { Debt, Order, Product, ProductsMap, StoreSubscriber, SubscriptionPlan, MasterSettings } from "../types";
+import { Debt, Order, Product, ProductsMap, StoreSubscriber, SubscriptionPlan, MasterSettings, StoreUser, StorePermission } from "../types";
 
 /**
  * Sanitize and normalize Google Apps Script Web App URLs
@@ -138,11 +138,12 @@ export interface StoreSyncResult {
   products?: ProductsMap;
   orders?: Order[];
   debts?: Debt[];
+  users?: StoreUser[];
   message?: string;
 }
 
 /**
- * Fetch full store database (Products, Orders, Debts) from Google Sheet
+ * Fetch full store database (Products, Orders, Debts, Users) from Google Sheet
  */
 export async function syncStoreFromCloud(scriptUrl: string): Promise<StoreSyncResult | null> {
   return fetchCloudData<StoreSyncResult>(scriptUrl, "getStoreData");
@@ -168,6 +169,7 @@ export async function cloudAddOrder(scriptUrl: string, order: Order): Promise<vo
     customerBackupPhone: order.cBackup,
     customerArea: order.cArea,
     cartItems: order.cartItems,
+    cashierName: order.cashierName || "",
   });
 }
 
@@ -521,6 +523,221 @@ export async function cloudFetchMasterAdminPassword(
   } catch {}
 
   return null;
+}
+
+// ==========================================
+// STORE USERS & RBAC PERMISSIONS ACTIONS
+// ==========================================
+
+export interface EmployeeLoginResult {
+  success: boolean;
+  user?: StoreUser;
+  message?: string;
+}
+
+/**
+ * Verify employee credentials against Client Sheet (Users sheet)
+ */
+export async function cloudLoginEmployee(
+  storeScriptUrl: string,
+  username: string,
+  password: string
+): Promise<EmployeeLoginResult> {
+  const { url: cleanUrl } = normalizeScriptUrl(storeScriptUrl);
+  if (!cleanUrl) {
+    return { success: false, message: "رابط خادم المتجر غير متوفر" };
+  }
+
+  const cleanUser = username.trim();
+  const cleanPass = password.trim();
+
+  // Try action: "login" first, then "login_user"
+  const actions = ["login", "login_user"];
+  for (const act of actions) {
+    try {
+      const res = await fetchCloudData<EmployeeLoginResult & { valid?: boolean; role?: string }>(cleanUrl, act, {
+        username: cleanUser,
+        userTitle: cleanUser,
+        password: cleanPass,
+      });
+
+      if (res && (res.success || res.valid) && res.user) {
+        // Ensure permissions is an array
+        let rawPerms = res.user.permissions as unknown;
+        let perms: StorePermission[] = [];
+        if (typeof rawPerms === "string") {
+          try {
+            perms = JSON.parse(rawPerms);
+          } catch {
+            perms = (rawPerms as string).split(",").map((p) => p.trim()) as StorePermission[];
+          }
+        } else if (Array.isArray(rawPerms)) {
+          perms = rawPerms as StorePermission[];
+        }
+        return {
+          success: true,
+          user: {
+            ...res.user,
+            permissions: Array.isArray(perms) && perms.length > 0 ? perms : ["pos"],
+          },
+        };
+      }
+
+      if (res && res.message && (res.message.includes("معلق") || res.message.includes("غير صحيحة"))) {
+        return { success: false, message: res.message };
+      }
+    } catch (err) {
+      console.warn(`Employee cloud login (${act}) error:`, err);
+    }
+  }
+
+  return { success: false, message: "بيانات الدخول غير صحيحة" };
+}
+
+/**
+ * Fetch all users for a store from Client Sheet (getUsers / get_users)
+ */
+export async function cloudGetStoreUsers(
+  storeScriptUrl: string,
+  username?: string
+): Promise<StoreUser[]> {
+  const { url: cleanUrl } = normalizeScriptUrl(storeScriptUrl);
+  if (!cleanUrl) return [];
+
+  const actions = ["getUsers", "get_users"];
+  for (const act of actions) {
+    try {
+      const res = await fetchCloudData<{ success: boolean; users?: StoreUser[] }>(
+        cleanUrl,
+        act,
+        username ? { username } : {}
+      );
+      if (res && res.success && Array.isArray(res.users) && res.users.length > 0) {
+        return res.users.map((u) => {
+          let rawPerms = u.permissions as unknown;
+          let perms: StorePermission[] = [];
+          if (typeof rawPerms === "string") {
+            try {
+              perms = JSON.parse(rawPerms);
+            } catch {
+              perms = (rawPerms as string).split(",").map((p) => p.trim()) as StorePermission[];
+            }
+          } else if (Array.isArray(rawPerms)) {
+            perms = rawPerms as StorePermission[];
+          }
+          return {
+            ...u,
+            permissions: Array.isArray(perms) && perms.length > 0 ? perms : ["pos"],
+          };
+        });
+      }
+    } catch {}
+  }
+
+  return [];
+}
+
+/**
+ * Save or update employee and permissions in Client Sheet Users table (addUser, updateUser, save_user_permissions)
+ */
+export async function cloudSaveStoreUser(
+  storeScriptUrl: string,
+  user: StoreUser
+): Promise<boolean> {
+  const { url: cleanUrl } = normalizeScriptUrl(storeScriptUrl);
+  if (!cleanUrl) return false;
+
+  const permsStr = JSON.stringify(user.permissions || ["pos"]);
+
+  // 1. Try POST with action "addUser" (which updates if user exists or appends if new)
+  let ok = await sendCloudAction(cleanUrl, {
+    action: "addUser",
+    id: user.id,
+    username: user.username,
+    userTitle: user.userTitle,
+    password: user.password,
+    permissions: permsStr,
+    status: user.status || "نشط",
+    createdAt: user.createdAt,
+  });
+
+  // Fallback to "save_user_permissions"
+  if (!ok) {
+    ok = await sendCloudAction(cleanUrl, {
+      action: "save_user_permissions",
+      id: user.id,
+      username: user.username,
+      userTitle: user.userTitle,
+      password: user.password,
+      permissions: permsStr,
+      status: user.status || "نشط",
+      createdAt: user.createdAt,
+    });
+  }
+
+  // 2. Resilient GET fallback
+  if (!ok) {
+    try {
+      const u = new URL(cleanUrl);
+      u.searchParams.set("action", "addUser");
+      u.searchParams.set("id", user.id);
+      u.searchParams.set("username", user.username);
+      u.searchParams.set("userTitle", user.userTitle);
+      u.searchParams.set("password", user.password);
+      u.searchParams.set("permissions", permsStr);
+      u.searchParams.set("status", user.status || "نشط");
+      u.searchParams.set("_t", Date.now().toString());
+      fetch(u.toString(), { mode: "no-cors" }).catch(() => {});
+    } catch {}
+  }
+
+  return true;
+}
+
+/**
+ * Delete employee from Client Sheet Users table (deleteUser, delete_user)
+ */
+export async function cloudDeleteStoreUser(
+  storeScriptUrl: string,
+  username: string,
+  userTitle: string,
+  id?: string
+): Promise<boolean> {
+  const { url: cleanUrl } = normalizeScriptUrl(storeScriptUrl);
+  if (!cleanUrl) return false;
+
+  // Try POST action "deleteUser"
+  let ok = await sendCloudAction(cleanUrl, {
+    action: "deleteUser",
+    username,
+    userTitle,
+    id,
+  });
+
+  // Fallback to "delete_user"
+  if (!ok) {
+    ok = await sendCloudAction(cleanUrl, {
+      action: "delete_user",
+      username,
+      userTitle,
+      id,
+    });
+  }
+
+  // Resilient GET fallback
+  if (!ok) {
+    try {
+      const u = new URL(cleanUrl);
+      u.searchParams.set("action", "deleteUser");
+      u.searchParams.set("username", username);
+      u.searchParams.set("userTitle", userTitle);
+      if (id) u.searchParams.set("id", id);
+      u.searchParams.set("_t", Date.now().toString());
+      fetch(u.toString(), { mode: "no-cors" }).catch(() => {});
+    } catch {}
+  }
+
+  return true;
 }
 
 

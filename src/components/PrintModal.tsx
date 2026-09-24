@@ -354,6 +354,12 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
                   {order.method}
                 </span>
               </div>
+              {order.cashierName && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">الكاشير / الموظف:</span>
+                  <span className="font-bold text-slate-800 text-[10px]">{order.cashierName}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">حالة الفاتورة:</span>
                 <span

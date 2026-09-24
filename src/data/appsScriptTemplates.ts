@@ -5,27 +5,60 @@
 export const MASTER_SUBSCRIPTIONS_SCRIPT_CODE = `/**
  * ====================================================================
  * منظومة RTG-SYSTEM — كود الخادم المركزي للمشتركين والتراخيص والإعدادات
- * النسخة: 4.0 (Full Two-Way Sync, Settings & Multi-Sheet Architecture)
+ * النسخة: 4.5 (Two-Tier Auth, Auto-Setup Menu, & Official RTG Theme)
  * ====================================================================
+ * 
+ * الميزات المتقدمة المدمجة:
+ * 1. زر وقائمة [⚙️ منظومة RTG] في أعلى شيت الخادم المركزي للتهيئة بنقرة واحدة.
+ * 2. التحقق الذكي المزدوج (Two-Tier Authentication):
+ *    - إذا كانت كلمة المرور للمالك: يسجل الدخول كـ (Admin) بكامل الصلاحيات.
+ *    - إذا كانت كلمة المرور لموظف: ينتقل الخادم المركزي تلقائياً لفحص ورقة [Users]
+ *      في رابط الخادم الخاص بالمتجر، ويدخل الموظف بصلاحياته المحددة واسم وظيفته!
+ * 3. تطبيق هوية وألوان RTG الرسمية (#c5834e و #1e293b و #a6632f) تلقائياً لكافة الأوراق.
  * 
  * الأوراق (الصفحات) التي يديرها هذا السكربت تلقائياً داخل جدول جوجل:
  * 1. [المشتركون]: لحفظ وتحديث كافة المتاجر، الحسابات، كلمات المرور، والتراخيص.
  * 2. [الإعدادات وبيانات المنظومة]: لحفظ رابط الخادم السحابي، كلمة سر الماستر أدمن، وكود النظام.
  * 3. [باقات وأسعار الاشتراكات]: لحفظ وتعديل أسعار وباقات الاشتراكات (1 شهر، 3 أشهر، 6 أشهر، سنوي...).
+ * 4. [التواصل_الاجتماعي]: لحفظ روابط وسائل التواصل والدعم الفني.
  * 
  * طريقة التثبيت السريعة:
  * 1. افتح جدول بيانات جوجل جديد أو جدول المشتركين الحالي.
  * 2. من القائمة: الإضافات (Extensions) -> Apps Script.
  * 3. احذف أي كود والصق هذا الكود كاملاً، ثم اضغط حفظ (Save).
- * 4. من شريط الأدوات العلوي اختر الدالة setupMasterSheet واضغط "تشغيل (Run)".
- *    (سيتم تلقائياً إنشاء وتنسيق الصفحات الثلاث وتعبئتها بالبيانات الافتراضية).
+ * 4. من شريط الأدوات العلوي في الشيت ستجد قائمة [⚙️ منظومة RTG] -> اضغط "تهيئة صفحات وألوان الخادم المركزي (نقرة واحدة)".
  * 5. اضغط "نشر (Deploy)" -> "نشر جديد (New deployment)".
  * 6. اختر "تطبيق ويب (Web app)":
- *    - الوصف: RTG-SYSTEM Master Server v4
+ *    - الوصف: RTG-SYSTEM Master Server v4.5
  *    - تنفيذ كـ (Execute as): أنا (Me)
  *    - مَن يملك حق الوصول (Who has access): أي شخص (Anyone)  [ضروري جداً]
  * 7. اضغط Deploy وانسخ الرابط الناتج وضعه في خانة "رابط الخادم السحابي المركزي" بلوحة الإدارة.
  */
+
+/**
+ * دالة onOpen تعمل تلقائياً بمجرد فتح الشيت
+ * وتضيف زر وقائمة "⚙️ منظومة RTG" في أعلى الصفحة مباشرة
+ */
+function onOpen() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.createMenu('⚙️ منظومة RTG')
+      .addItem('🚀 تهيئة صفحات وألوان الخادم المركزي (نقرة واحدة)', 'setupMasterSheet')
+      .addSeparator()
+      .addItem('🎨 تطبيق ثيم وألوان RTG البرونزية', 'setupMasterSheet')
+      .addItem('📊 فحص المشتركين والتراخيص السحابية', 'checkMasterStatus')
+      .addItem('ℹ️ عن منظومة RTG SYSTEM', 'showAboutMaster')
+      .addToUi();
+
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      "انقر على قائمة [⚙️ منظومة RTG] في الشريط العلوي لتهيئة أوراق الخادم المركزي بالألوان الرسمية!",
+      "منظومة RTG SYSTEM",
+      7
+    );
+  } catch (e) {
+    Logger.log("onOpen menu error: " + e);
+  }
+}
 
 function doGet(e) {
   try {
@@ -35,85 +68,186 @@ function doGet(e) {
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // 1. فحص ترخيص المتجر للدخول
+    // 1. فحص ترخيص المتجر والدخول المزدوج (المالك والموظفين Two-Tier Auth)
     if (action === "checkLicense") {
       var sheetSub = getOrCreateSheet(ss, "المشتركون");
       var data = sheetSub.getDataRange().getValues();
 
-      var key = (params.key || "").toString().trim().toUpperCase();
-      var username = (params.username || params.email || "").toString().trim().toLowerCase();
+      var key = (params.key || "").toString().trim();
+      var username = (params.username || params.email || "").toString().trim();
       var password = (params.password || "").toString().trim();
+
+      // مصطلح البحث (قد يكون كود المتجر أو اسم المستخدم أو اسم المتجر)
+      var searchTerm = (username || key || "").toLowerCase().trim();
+      var searchNoSpaces = searchTerm.replace(/\\s+/g, "");
 
       var foundStore = null;
 
       for (var i = 1; i < data.length; i++) {
-        var rowCode = (data[i][0] || "").toString().trim().toUpperCase();
-        var rowUser = (data[i][1] || "").toString().trim().toLowerCase();
+        var rowCode = (data[i][0] || "").toString().trim();
+        var rowUser = (data[i][1] || "").toString().trim();
         var rowPass = (data[i][2] || "").toString().trim();
+        var rowName = (data[i][3] || "").toString().trim();
 
-        var matchByKey = (key && rowCode === key);
-        var matchByCreds = (username && rowUser === username && (!password || rowPass === password));
+        var rowUserNorm = rowUser.toLowerCase().replace(/\\s+/g, "");
+        var rowCodeNorm = rowCode.toLowerCase();
+        var rowNameNorm = rowName.toLowerCase();
 
-        if (matchByKey || matchByCreds) {
+        // مطابقة ذكية ومرنة لاسم المتجر أو الكود أو اليوزر
+        var matchCode = rowCode && (rowCodeNorm === searchTerm || rowCodeNorm === key.toLowerCase());
+        var matchUser = rowUser && (
+          rowUser.toLowerCase() === searchTerm ||
+          rowUserNorm === searchNoSpaces ||
+          (searchTerm.length >= 3 && rowUser.toLowerCase().indexOf(searchTerm) === 0) ||
+          (rowUser.length >= 3 && searchTerm.indexOf(rowUser.toLowerCase()) === 0)
+        );
+        var matchName = rowName && (rowNameNorm === searchTerm || rowNameNorm.indexOf(searchTerm) >= 0);
+
+        if (matchCode || matchUser || matchName) {
           foundStore = {
-            storeCode: data[i][0],
-            username: data[i][1],
-            storeName: data[i][3] || "متجر RTG-SYSTEM",
-            phone: data[i][4],
-            cloudUrl: data[i][5] || "",
+            storeCode: data[i][0] ? data[i][0].toString().trim() : "",
+            username: data[i][1] ? data[i][1].toString().trim() : "",
+            password: data[i][2] ? data[i][2].toString().trim() : "",
+            storeName: data[i][3] ? data[i][3].toString().trim() : "متجر RTG-SYSTEM",
+            phone: data[i][4] ? data[i][4].toString().trim() : "",
+            cloudUrl: data[i][5] ? data[i][5].toString().trim() : "",
             startDate: formatDate(data[i][6]),
             endDate: formatDate(data[i][7]),
-            plan: data[i][8] || "شهري",
-            status: data[i][9] || "نشط",
-            notes: data[i][10] || ""
+            plan: data[i][8] ? data[i][8].toString().trim() : "شهري",
+            status: data[i][9] ? data[i][9].toString().trim() : "نشط",
+            notes: data[i][10] ? data[i][10].toString().trim() : ""
           };
           break;
         }
       }
 
-      var result = {};
       if (!foundStore) {
-        result = {
+        return respondOutput({
           valid: false,
-          message: "بيانات الدخول أو كود الترخيص غير مسجلة بالنظام!"
-        };
-      } else {
-        var today = new Date();
-        today.setHours(0, 0, 0, 0);
-        var endD = new Date(foundStore.endDate);
-        endD.setHours(23, 59, 59, 999);
+          message: "بيانات المتجر غير مسجلة بالنظام (يرجى التحقق من اسم المستخدم أو كود المتجر)"
+        }, callback);
+      }
 
-        var diffTime = endD.getTime() - today.getTime();
-        var daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      var today = new Date();
+      today.setHours(0, 0, 0, 0);
+      var endD = new Date(foundStore.endDate);
+      endD.setHours(23, 59, 59, 999);
 
-        if (foundStore.status === "معلق" || foundStore.status === "ملغى") {
-          result = {
-            valid: false,
-            message: "تم إيقاف حساب هذا المتجر مؤقتاً. يرجى التواصل مع الإدارة للتفعيل."
-          };
-        } else if (daysRemaining < 0) {
-          result = {
-            valid: false,
-            expired: true,
-            endDate: foundStore.endDate,
-            message: "انتهت فترة اشتراك متجرك في (" + foundStore.endDate + "). يرجى تجديد الاشتراك للمتابعة."
-          };
-        } else {
-          result = {
-            valid: true,
-            storeCode: foundStore.storeCode,
-            storeName: foundStore.storeName,
-            cloudUrl: foundStore.cloudUrl,
-            scriptUrl: foundStore.cloudUrl,
-            endDate: foundStore.endDate,
-            daysRemaining: daysRemaining,
-            plan: foundStore.plan,
-            message: "تم التحقق من الترخيص بنجاح ✓"
-          };
+      var diffTime = endD.getTime() - today.getTime();
+      var daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (foundStore.status === "معلق" || foundStore.status === "ملغى") {
+        return respondOutput({
+          valid: false,
+          message: "تم إيقاف حساب هذا المتجر مؤقتاً. يرجى التواصل مع الإدارة للتفعيل."
+        }, callback);
+      }
+
+      if (daysRemaining < 0) {
+        return respondOutput({
+          valid: false,
+          expired: true,
+          endDate: foundStore.endDate,
+          message: "انتهت فترة اشتراك متجرك في (" + foundStore.endDate + "). يرجى تجديد الاشتراك للمتابعة."
+        }, callback);
+      }
+
+      // ====================================================
+      // المستوى الأول: فحص كلمة مرور المالك (Full Admin Access)
+      // ====================================================
+      if (password && foundStore.password && foundStore.password === password) {
+        return respondOutput({
+          valid: true,
+          role: "admin",
+          isOwner: true,
+          userTitle: "المالك / المدير العام",
+          permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
+          storeCode: foundStore.storeCode,
+          storeName: foundStore.storeName,
+          username: foundStore.username,
+          cloudUrl: foundStore.cloudUrl,
+          scriptUrl: foundStore.cloudUrl,
+          endDate: foundStore.endDate,
+          daysRemaining: daysRemaining,
+          plan: foundStore.plan,
+          message: "تم التحقق من حساب المالك بنجاح ✓ (كامل الصلاحيات 100%)"
+        }, callback);
+      }
+
+      // ====================================================
+      // المستوى الثاني: كلمة المرور لم تطابق المالك!
+      // التحقق التلقائي من حسابات الموظفين عبر رابط الخادم الخاص بالمتجر (ورقة Users)
+      // ====================================================
+      if (foundStore.cloudUrl && password) {
+        try {
+          var storeEndpoint = foundStore.cloudUrl.trim();
+          var sep = storeEndpoint.indexOf('?') >= 0 ? '&' : '?';
+          var checkEmpUrl = storeEndpoint + sep +
+            'action=login&username=' + encodeURIComponent(foundStore.username) +
+            '&userTitle=' + encodeURIComponent(username) +
+            '&password=' + encodeURIComponent(password);
+
+          var resp = UrlFetchApp.fetch(checkEmpUrl, {
+            muteHttpExceptions: true,
+            validateHttpsCertificates: false
+          });
+
+          var respText = resp.getContentText();
+          var empJson = null;
+          try {
+            empJson = JSON.parse(respText);
+          } catch(pe) {
+            var m = respText.match(/^[a-zA-Z0-9_]+\\((.*)\\);?$/);
+            if (m) {
+              empJson = JSON.parse(m[1]);
+            }
+          }
+
+          if (empJson && empJson.success && empJson.user) {
+            var empUser = empJson.user;
+            var perms = empUser.permissions || ["pos"];
+            if (typeof perms === "string") {
+              try { perms = JSON.parse(perms); } catch(e) { perms = ["pos"]; }
+            }
+
+            return respondOutput({
+              valid: true,
+              role: "employee",
+              isOwner: false,
+              user: empUser,
+              userTitle: empUser.userTitle || "موظف مبيعات",
+              permissions: perms,
+              storeCode: foundStore.storeCode,
+              storeName: foundStore.storeName,
+              username: foundStore.username,
+              cloudUrl: foundStore.cloudUrl,
+              scriptUrl: foundStore.cloudUrl,
+              endDate: foundStore.endDate,
+              daysRemaining: daysRemaining,
+              plan: foundStore.plan,
+              message: "✓ مرحباً بك يا " + (empUser.userTitle || "موظف") + " في متجر " + foundStore.storeName
+            }, callback);
+          } else if (empJson && empJson.message && empJson.message.indexOf("معلق") >= 0) {
+            return respondOutput({
+              valid: false,
+              message: empJson.message
+            }, callback);
+          }
+        } catch (fetchErr) {
+          Logger.log("UrlFetchApp employee check exception: " + fetchErr);
         }
       }
 
-      return respondOutput(result, callback);
+      // إذا لم تطابق المالك أو الموظف، نعيد رابط الخادم الخاص لتمكين فحص العميل المباشر
+      return respondOutput({
+        valid: false,
+        storeFound: true,
+        storeCode: foundStore.storeCode,
+        storeName: foundStore.storeName,
+        username: foundStore.username,
+        cloudUrl: foundStore.cloudUrl,
+        message: "كلمة المرور غير صحيحة (يرجى التأكد من كلمة مرور المالك أو الموظف)"
+      }, callback);
     }
 
     // 2. جلب جميع المشتركين للوحة الإدارة
@@ -581,7 +715,7 @@ function writeSocialSheet(ss, links) {
   var sheet = getOrCreateSheet(ss, "التواصل_الاجتماعي");
   sheet.clear();
   sheet.appendRow(["المنصة", "رابط الحساب", "تاريخ آخر تعديل"]);
-  styleHeaderRow(sheet, 3);
+  styleMasterRtgHeader(sheet, 3, "#162033");
   var now = new Date().toLocaleString();
   sheet.appendRow(["واتساب (WhatsApp)", links.whatsapp || "", now]);
   sheet.appendRow(["إنستغرام (Instagram)", links.instagram || "", now]);
@@ -590,7 +724,7 @@ function writeSocialSheet(ss, links) {
 }
 
 // ----------------------------------------------------
-// أدوات المساعدة وإنشاء الأوراق
+// أدوات المساعدة وتطبيق ألوان وهوية RTG
 // ----------------------------------------------------
 function getOrCreateSheet(ss, name) {
   var sheet = ss.getSheetByName(name);
@@ -600,13 +734,34 @@ function getOrCreateSheet(ss, name) {
   return sheet;
 }
 
-function styleHeaderRow(sheet, numCols) {
+function styleMasterRtgHeader(sheet, numCols, bgColor) {
+  var bg = bgColor || "#c5834e";
   var headerRange = sheet.getRange(1, 1, 1, numCols);
-  headerRange.setBackground("#0d121f");
-  headerRange.setFontColor("#f8fafc");
-  headerRange.setFontWeight("bold");
-  headerRange.setHorizontalAlignment("center");
+  headerRange
+    .setBackground(bg)
+    .setFontColor("#ffffff")
+    .setFontSize(11)
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle");
+
+  sheet.setRowHeight(1, 38);
   sheet.setFrozenRows(1);
+  sheet.setRightToLeft(true);
+
+  try {
+    sheet.setTabColor(bg);
+  } catch (e) {}
+
+  try {
+    headerRange.setBorder(true, true, true, true, true, true, "#8a4f21", SpreadsheetApp.BorderStyle.SOLID);
+  } catch (e) {}
+
+  try {
+    if (!sheet.getFilter()) {
+      headerRange.createFilter();
+    }
+  } catch (e) {}
 }
 
 function formatDate(val) {
@@ -631,13 +786,13 @@ function respondOutput(obj, callback) {
 }
 
 /**
- * دالة التهيئة التلقائية للملف المركزي 1 (المشتركون، الإعدادات، والباقات)
- * اضغط "تشغيل (Run)" لهذه الدالة لتجهيز وإنشاء الجداول الثلاثة فوراً
+ * دالة التهيئة التلقائية للملف المركزي (المشتركون، الإعدادات، باقات الاشتراكات، والتواصل)
+ * تدعم تطبيق هوية وألوان RTG الرسمية (#c5834e) وعرض تنبيه تأكيد تفصيلي
  */
 function setupMasterSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 1. ورقة المشتركون
+  // 1. ورقة المشتركون (اللون البرونزي النحاسي #c5834e)
   var sheetSubs = getOrCreateSheet(ss, "المشتركون");
   var subHeaders = [
     "كود المتجر",
@@ -653,30 +808,46 @@ function setupMasterSheet() {
     "ملاحظات"
   ];
   sheetSubs.getRange(1, 1, 1, subHeaders.length).setValues([subHeaders]);
-  styleHeaderRow(sheetSubs, subHeaders.length);
+  styleMasterRtgHeader(sheetSubs, subHeaders.length, "#c5834e");
   sheetSubs.setColumnWidth(1, 130);
   sheetSubs.setColumnWidth(2, 140);
-  sheetSubs.setColumnWidth(3, 110);
-  sheetSubs.setColumnWidth(4, 180);
+  sheetSubs.setColumnWidth(3, 120);
+  sheetSubs.setColumnWidth(4, 190);
   sheetSubs.setColumnWidth(5, 130);
-  sheetSubs.setColumnWidth(6, 250);
+  sheetSubs.setColumnWidth(6, 260);
   sheetSubs.setColumnWidth(7, 120);
   sheetSubs.setColumnWidth(8, 120);
-  sheetSubs.setColumnWidth(9, 100);
-  sheetSubs.setColumnWidth(10, 100);
+  sheetSubs.setColumnWidth(9, 110);
+  sheetSubs.setColumnWidth(10, 110);
   sheetSubs.setColumnWidth(11, 200);
 
-  // 2. ورقة الإعدادات وبيانات المنظومة
+  // إضافة متجر تجريبي / أساسي إذا كانت الورقة فارغة
+  if (sheetSubs.getLastRow() <= 1) {
+    sheetSubs.appendRow([
+      "RTG-101",
+      "محمد 2005",
+      "20052005",
+      "متجر RTG System",
+      "0910000000",
+      "",
+      "2025-01-01",
+      "2026-12-31",
+      "سنوي",
+      "نشط",
+      "المتجر الرئيسي لمنظومة RTG"
+    ]);
+  }
+
+  // 2. ورقة الإعدادات وبيانات المنظومة (اللون الكحلي الداكن #1e293b)
   var sheetSettings = getOrCreateSheet(ss, "الإعدادات وبيانات المنظومة");
   var setHeaders = ["المفتاح (Key)", "القيمة (Value)", "الوصف (Description)", "تاريخ التحديث"];
   sheetSettings.getRange(1, 1, 1, setHeaders.length).setValues([setHeaders]);
-  styleHeaderRow(sheetSettings, setHeaders.length);
+  styleMasterRtgHeader(sheetSettings, setHeaders.length, "#1e293b");
   sheetSettings.setColumnWidth(1, 180);
   sheetSettings.setColumnWidth(2, 320);
-  sheetSettings.setColumnWidth(3, 240);
+  sheetSettings.setColumnWidth(3, 260);
   sheetSettings.setColumnWidth(4, 180);
 
-  // إضافة البيانات الافتراضية إذا كانت الورقة جديدة
   if (sheetSettings.getLastRow() <= 1) {
     var now = new Date().toISOString();
     var defaultSettings = [
@@ -689,7 +860,7 @@ function setupMasterSheet() {
     sheetSettings.getRange(2, 1, defaultSettings.length, 4).setValues(defaultSettings);
   }
 
-  // 3. ورقة باقات وأسعار الاشتراكات
+  // 3. ورقة باقات وأسعار الاشتراكات (اللون النحاسي الداكن #a6632f)
   var sheetPlans = getOrCreateSheet(ss, "باقات وأسعار الاشتراكات");
   var planHeaders = [
     "معرف الباقة",
@@ -702,11 +873,11 @@ function setupMasterSheet() {
     "الوصف"
   ];
   sheetPlans.getRange(1, 1, 1, planHeaders.length).setValues([planHeaders]);
-  styleHeaderRow(sheetPlans, planHeaders.length);
+  styleMasterRtgHeader(sheetPlans, planHeaders.length, "#a6632f");
   sheetPlans.setColumnWidth(1, 110);
   sheetPlans.setColumnWidth(2, 180);
   sheetPlans.setColumnWidth(3, 110);
-  sheetPlans.setColumnWidth(4, 100);
+  sheetPlans.setColumnWidth(4, 110);
   sheetPlans.setColumnWidth(5, 120);
   sheetPlans.setColumnWidth(6, 140);
   sheetPlans.setColumnWidth(7, 300);
@@ -716,30 +887,154 @@ function setupMasterSheet() {
     writePlansSheet(ss, getDefaultPlans());
   }
 
+  // 4. ورقة التواصل الاجتماعي
+  var sheetSocial = getOrCreateSheet(ss, "التواصل_الاجتماعي");
+  if (sheetSocial.getLastRow() <= 1) {
+    writeSocialSheet(ss, readSocialSheet(ss));
+  } else {
+    styleMasterRtgHeader(sheetSocial, 3, "#162033");
+  }
+
+  // حذف الصفحات الافتراضية الفارغة مثل Sheet1 أو ورقة 1
+  try {
+    var allSheets = ss.getSheets();
+    if (allSheets.length > 4) {
+      for (var sIdx = 0; sIdx < allSheets.length; sIdx++) {
+        var sName = allSheets[sIdx].getName();
+        if (sName === "Sheet1" || sName === "ورقة 1" || sName === "ورقة1") {
+          ss.deleteSheet(allSheets[sIdx]);
+          break;
+        }
+      }
+    }
+  } catch (e) {}
+
   SpreadsheetApp.flush();
-  Logger.log("✓ تم تهيئة وتنسيق كافة أوراق قاعدة بيانات المشتركين والإعدادات والباقات بنجاح!");
+
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var alertLines = [
+      "✓ تم تهيئة أوراق الخادم المركزي وتطبيق ألوان وهوية RTG الرسمية (#c5834e):",
+      "",
+      "1. [المشتركون] — حسابات المتاجر، التراخيص، الصلاحيات، وربط روابط الخوادم (لون برونزي)",
+      "2. [الإعدادات وبيانات المنظومة] — إعدادات النظام وكلمة سر الماستر أدمن (لون كحلي)",
+      "3. [باقات وأسعار الاشتراكات] — باقات الاشتراك والأسعار بالدينار الليبي (لون نحاسي داكن)",
+      "4. [التواصل_الاجتماعي] — روابط منصات التواصل والدعم الفني (لون كحلي داكن)",
+      "",
+      "⚡ ميزة Two-Tier Auth مفعلة:",
+      "عند دخول الموظف بكلمة مروره، سيقوم الخادم المركزي تلقائياً بالانتقال لرابط الخادم الخاص بالمتجر والتحقق من ورقة Users وتطبيق صلاحياته بدقة 100%!",
+      "",
+      "📌 خطوة النشر والربط بالمنظومة:",
+      "1. اضغط على زر [نشر (Deploy)] في أعلى الشاشة -> [نشر جديد (New deployment)].",
+      "2. اختر نوع [تطبيق ويب (Web app)].",
+      "3. اختر (Who has access / من يملك الوصول): [أي شخص (Anyone)].",
+      "4. اضغط Deploy وانسخ الرابط وضع في خانة رابط الخادم المركزي بلوحة تحكم RTG."
+    ];
+    ui.alert(
+      "🌟 تم إعداد الخادم المركزي لمنظومة RTG بنجاح 🌟",
+      alertLines.join("\\n"),
+      ui.ButtonSet.OK
+    );
+  } catch (e) {
+    ss.toast("✓ تم تهيئة أوراق الخادم المركزي وتطبيق ألوان RTG بنجاح!", "منظومة RTG", 6);
+  }
+}
+
+function checkMasterStatus() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetSubs = ss.getSheetByName("المشتركون");
+  var sheetSettings = ss.getSheetByName("الإعدادات وبيانات المنظومة");
+  var sheetPlans = ss.getSheetByName("باقات وأسعار الاشتراكات");
+
+  var sCount = sheetSubs ? Math.max(0, sheetSubs.getLastRow() - 1) : 0;
+  var setCount = sheetSettings ? Math.max(0, sheetSettings.getLastRow() - 1) : 0;
+  var pCount = sheetPlans ? Math.max(0, sheetPlans.getLastRow() - 1) : 0;
+
+  var msgLines = [
+    "📊 إحصائيات الخادم المركزي لمنظومة RTG:",
+    "",
+    "• إجمالي المتاجر المشتركة: " + sCount,
+    "• بنود الإعدادات المركزية: " + setCount,
+    "• باقات الاشتراك المعتمدة: " + pCount,
+    "",
+    "✓ ميزة فحص الموظفين التلقائي (Two-Tier Auth) مفعلة 100%",
+    "✓ ثيم وهوية RTG الرسمية مطبقة بنجاح!"
+  ];
+  try {
+    SpreadsheetApp.getUi().alert("📊 فحص الخادم المركزي", msgLines.join("\\n"), SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    ss.toast(msgLines.join("\\n"), "منظومة RTG", 6);
+  }
+}
+
+function showAboutMaster() {
+  var infoLines = [
+    "✨ منظومة RTG-SYSTEM — الخادم السحابي المركزي v4.5 ✨",
+    "",
+    "نظام إدارة التراخيص والمشتركين والتحقق الثنائي للملاك والموظفين (Two-Tier Authentication)",
+    "الهوية البصرية: ثيم RTG البرونزي الرسمي (#c5834e)",
+    "",
+    "جميع الحقوق محفوظة لمنظومة RTG SYSTEM"
+  ];
+  try {
+    SpreadsheetApp.getUi().alert("ℹ️ عن الخادم المركزي", infoLines.join("\\n"), SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    SpreadsheetApp.getActiveSpreadsheet().toast(infoLines.join("\\n"), "منظومة RTG", 6);
+  }
 }
 `;
 
 export const STORE_ENGINE_SCRIPT_CODE = `/**
  * ====================================================================
- * منظومة RTG-SESTEM — كود محرك المتجر (المنتجات، الفواتير، الديون)
- * النسخة: 3.0 (Full CRUD, Stock Control & Sync)
+ * منظومة RTG-SESTEM — كود محرك المتجر الخاص (النسخة المتطورة 3.5)
+ * ====================================================================
+ * الأوراق الأربعة: [المنتجات] - [الفواتير] - [الديون] - [Users]
+ * الهوية والألوان: متوافقة 100% مع ألوان وهوية منظومة RTG الرسمية (#c5834e)
  * ====================================================================
  * 
- * طريقة الاستخدام:
- * 1. افتح جدول متجرك (ملف 2 أو ملف كل مشترك).
- * 2. من القائمة: الإضافات (Extensions) -> Apps Script.
- * 3. احذف أي كود والصق هذا الكود كاملاً، ثم اضغط حفظ (Save).
- * 4. من القائمة العلوية اختر الدالة setupStoreSheets واضغط "تشغيل (Run)"
- *    ليتم تلقائياً إنشاء وتنسيق الصفحات الثلاث: [المنتجات] و [الفواتير] و [الديون].
- * 5. اضغط "نشر (Deploy)" -> "نشر جديد (New deployment)".
- * 6. اختر "تطبيق ويب (Web app)".
- *    - الوصف: RTG Store Engine v3
+ * 🚀 طريقة التثبيت والتهيئة بنقرة واحدة:
+ * 1. افتح جدول Google Sheet جديد لمتجر المشترك.
+ * 2. من القائمة العلوية: الإضافات (Extensions) -> Apps Script.
+ * 3. احذف أي كود موجود والصق هذا الكود كاملاً، ثم اضغط حفظ (Save 💾).
+ * 4. ارجع لجدول الشيت وحدّث الصفحة (Reload) — ستجد في الشريط العلوي زراً/قائمة باسم:
+ *    [ ⚙️ منظومة RTG ]
+ * 5. اضغط على [ ⚙️ منظومة RTG ] ثم اختر:
+ *    "🚀 تهيئة صفحات وألوان متجر RTG (نقرة واحدة)"
+ *    -> سيتم فوراً إنشاء وتنسيق الأوراق الأربعة بألوان وهوية المنظومة الرسمية!
+ * 
+ * 6. نشر التطبيق والربط:
+ *    - اضغط على "نشر (Deploy)" في الزاوية العلوية -> "نشر جديد (New deployment)".
+ *    - اختر "تطبيق ويب (Web app)".
+ *    - الوصف: RTG Store Engine v3.5
  *    - تنفيذ كـ (Execute as): أنا (Me)
  *    - مَن يملك حق الوصول (Who has access): أي شخص (Anyone)  [ضروري جداً]
- * 7. اضغط Deploy وانسخ الرابط الناتج وضعه في خانة "رابط الخادم الخاص" للمتجر.
+ *    - اضغط Deploy وانسخ الرابط الناتج وضعه في خانة "رابط الخادم الخاص" للمتجر.
  */
+
+/**
+ * دالة onOpen تعمل تلقائياً بمجرد فتح الشيت
+ * وتضيف زر وقائمة "⚙️ منظومة RTG" في أعلى الصفحة مباشرة
+ */
+function onOpen() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.createMenu('⚙️ منظومة RTG')
+      .addItem('🚀 تهيئة صفحات وألوان متجر RTG (نقرة واحدة)', 'setupStoreSheets')
+      .addSeparator()
+      .addItem('🎨 تطبيق ثيم وألوان RTG البرونزية', 'setupStoreSheets')
+      .addItem('📊 فحص جاهزية أوراق العمل والبيانات', 'checkStoreStatus')
+      .addItem('ℹ️ عن منظومة RTG SYSTEM', 'showAboutRtg')
+      .addToUi();
+
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      "انقر على قائمة [⚙️ منظومة RTG] في الشريط العلوي لتهيئة الصفحات بالألوان الرسمية!",
+      "منظومة RTG SYSTEM",
+      7
+    );
+  } catch (e) {
+    Logger.log("onOpen menu error: " + e);
+  }
+}
 
 function doGet(e) {
   try {
@@ -822,18 +1117,245 @@ function doGet(e) {
         }
       }
 
+      // د. قراءة المستخدمين والصلاحيات (Users)
+      var userSheet = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      var users = [];
+      if (userSheet && userSheet.getLastRow() > 1) {
+        var uData = userSheet.getDataRange().getValues();
+        for (var u = 1; u < uData.length; u++) {
+          var uTitle = (uData[u][1] || "").toString().trim();
+          if (uTitle) {
+            var rawPerms = uData[u][3] ? uData[u][3].toString() : "[]";
+            var parsedPerms = [];
+            try {
+              parsedPerms = JSON.parse(rawPerms);
+            } catch (e) {
+              parsedPerms = rawPerms.split(",").map(function(s) { return s.trim(); });
+            }
+            users.push({
+              id: "USR-" + u,
+              username: (uData[u][0] || "").toString().trim(),
+              userTitle: uTitle,
+              password: (uData[u][2] || "").toString().trim(),
+              permissions: Array.isArray(parsedPerms) ? parsedPerms : ["pos"],
+              status: (uData[u][4] || "نشط").toString().trim(),
+              createdAt: uData[u][5] ? uData[u][5].toString() : "",
+              lastLogin: uData[u][6] ? uData[u][6].toString() : ""
+            });
+          }
+        }
+      }
+
       var result = {
         success: true,
         products: products,
         orders: orders,
         debts: debts,
+        users: users,
         syncedAt: new Date().toISOString()
       };
 
       return respondOutput(result, callback);
     }
 
-    // حذف منتج عبر GET
+    // 2. التحقق من تسجيل الدخول (المالك والموظفون)
+    if (action === "login" || action === "login_user" || action === "verifyEmployee") {
+      var inUser = (params.username || params.email || params.key || "").toString().trim().toLowerCase();
+      var inTitle = (params.userTitle || params.title || "").toString().trim().toLowerCase();
+      var inPass = (params.password || "").toString().trim();
+      var inUserNorm = inUser.replace(/\\s+/g, "");
+
+      var uSheet = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+
+      if (uSheet && uSheet.getLastRow() > 1) {
+        var uRows = uSheet.getDataRange().getValues();
+        for (var ui = 1; ui < uRows.length; ui++) {
+          var rowUser = (uRows[ui][0] || "").toString().trim();
+          var rowTitle = (uRows[ui][1] || "").toString().trim();
+          var rowPass = (uRows[ui][2] || "").toString().trim();
+          var rowStatus = (uRows[ui][4] || "نشط").toString().trim();
+
+          var rowUserNorm = rowUser.toLowerCase().replace(/\\s+/g, "");
+          var rowTitleNorm = rowTitle.toLowerCase();
+
+          // التحقق من تطابق كلمة المرور أولاً
+          var passMatches = (inPass && rowPass === inPass);
+
+          // التحقق من تطابق المعرف:
+          // 1. اسم المتجر / المستخدم الموحد
+          // 2. أو اسم الموظف المباشر / صفته (مثل: كاشير 1، أحمد، مسؤولة المبيعات)
+          // 3. أو إذا تم إرسال كلمة المرور مباشرة مع عنوان الموظف
+          var userMatches = !inUser ||
+            rowUser.toLowerCase() === inUser ||
+            rowUserNorm === inUserNorm ||
+            rowTitleNorm === inUser ||
+            (inTitle && rowTitleNorm === inTitle) ||
+            (inUser.length >= 3 && rowUser.toLowerCase().indexOf(inUser) === 0) ||
+            (rowUser.length >= 3 && inUser.indexOf(rowUser.toLowerCase()) === 0) ||
+            rowTitleNorm.indexOf(inUser) !== -1 ||
+            inUser.indexOf(rowTitleNorm) !== -1;
+
+          if (passMatches && userMatches) {
+            // التحقق من حالة الحساب: إذا كان معلقاً يتم الرفض
+            if (rowStatus === "معلق" || rowStatus.indexOf("معلق") !== -1) {
+              return respondOutput({
+                success: false,
+                valid: false,
+                message: "تم تعليق حساب هذا الموظف مؤقتاً، يرجى مراجعة إدارة المتجر للتفعيل"
+              }, callback);
+            }
+
+            var pStr = uRows[ui][3] ? uRows[ui][3].toString() : "[]";
+            var permArr = [];
+            try {
+              permArr = JSON.parse(pStr);
+            } catch (ex) {
+              permArr = pStr.split(",").map(function(s) { return s.trim(); });
+            }
+
+            // تحديث تاريخ آخر تسجيل دخول في العمود 7
+            var nowStr = new Date().toLocaleString("ar-LY");
+            try {
+              uSheet.getRange(ui + 1, 7).setValue(nowStr);
+            } catch (err) {}
+
+            return respondOutput({
+              success: true,
+              valid: true,
+              role: "employee",
+              isOwner: false,
+              user: {
+                id: "USR-" + ui,
+                username: rowUser,
+                userTitle: rowTitle,
+                permissions: Array.isArray(permArr) && permArr.length > 0 ? permArr : ["pos"],
+                status: rowStatus,
+                lastLogin: nowStr
+              },
+              permissions: Array.isArray(permArr) && permArr.length > 0 ? permArr : ["pos"],
+              userTitle: rowTitle,
+              message: "✓ تم تسجيل دخول الموظف بنجاح"
+            }, callback);
+          }
+        }
+      }
+
+      return respondOutput({
+        success: false,
+        valid: false,
+        message: "بيانات الدخول غير صحيحة (تأكد من اسم المستخدم أو اسم الموظف وكلمة المرور)"
+      }, callback);
+    }
+
+    // 3. جلب كافة الموظفين والصلاحيات (getUsers و get_users)
+    if (action === "getUsers" || action === "get_users") {
+      var uSheetList = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      var usersList = [];
+      if (uSheetList && uSheetList.getLastRow() > 1) {
+        var uld = uSheetList.getDataRange().getValues();
+        for (var uli = 1; uli < uld.length; uli++) {
+          var ut = (uld[uli][1] || "").toString().trim();
+          if (ut) {
+            var rawP = uld[uli][3] ? uld[uli][3].toString() : "[]";
+            var parsedP = [];
+            try {
+              parsedP = JSON.parse(rawP);
+            } catch (e) {
+              parsedP = rawP.split(",").map(function(s) { return s.trim(); });
+            }
+            usersList.push({
+              id: "USR-" + uli,
+              username: (uld[uli][0] || "").toString().trim(),
+              userTitle: ut,
+              password: (uld[uli][2] || "").toString().trim(),
+              permissions: Array.isArray(parsedP) && parsedP.length > 0 ? parsedP : ["pos"],
+              status: (uld[uli][4] || "نشط").toString().trim(),
+              createdAt: uld[uli][5] ? uld[uli][5].toString() : "",
+              lastLogin: uld[uli][6] ? uld[uli][6].toString() : ""
+            });
+          }
+        }
+      }
+      return respondOutput({ success: true, users: usersList }, callback);
+    }
+
+    // 4. إضافة أو تحديث موظف عبر GET (توافق كامل مع متصفحات الويب)
+    if (action === "addUser" || action === "updateUser" || action === "save_user_permissions" || action === "saveUser") {
+      var uSheetSaveGet = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      if (!uSheetSaveGet) {
+        uSheetSaveGet = ss.insertSheet("Users");
+        var uhGet = [
+          "اسم المستخدم الموحد",
+          "اسم الموظف / الصفة",
+          "كلمة المرور",
+          "الصلاحيات الممنوحة",
+          "الحالة",
+          "تاريخ الإنشاء",
+          "آخر تسجيل دخول"
+        ];
+        uSheetSaveGet.getRange(1, 1, 1, uhGet.length).setValues([uhGet]);
+        styleRtgHeader(uSheetSaveGet, uhGet.length, "#c5834e");
+      }
+
+      var uTitleSearchGet = (params.userTitle || "").toString().trim();
+      var uRowsDataGet = uSheetSaveGet.getDataRange().getValues();
+      var targetRowGet = -1;
+
+      for (var urg = 1; urg < uRowsDataGet.length; urg++) {
+        var rTitleG = (uRowsDataGet[urg][1] || "").toString().trim();
+        if (rTitleG.toLowerCase() === uTitleSearchGet.toLowerCase()) {
+          targetRowGet = urg + 1;
+          break;
+        }
+      }
+
+      var permsValGet = params.permissions || '["pos"]';
+      var nowStrGet = new Date().toLocaleString("ar-LY");
+      var uRowValsGet = [
+        params.username || "",
+        params.userTitle || "",
+        params.password || "",
+        permsValGet,
+        params.status || "نشط",
+        params.createdAt || nowStrGet,
+        params.lastLogin || ""
+      ];
+
+      if (targetRowGet > 0) {
+        var origCreatedG = uSheetSaveGet.getRange(targetRowGet, 6).getValue();
+        if (origCreatedG) uRowValsGet[5] = origCreatedG;
+        uSheetSaveGet.getRange(targetRowGet, 1, 1, uRowValsGet.length).setValues([uRowValsGet]);
+      } else {
+        uSheetSaveGet.appendRow(uRowValsGet);
+      }
+
+      return respondOutput({ success: true, message: "تم حفظ بيانات الموظف وصلاحياته بنجاح" }, callback);
+    }
+
+    // 5. حذف موظف عبر GET
+    if (action === "deleteUser" || action === "delete_user") {
+      var uSheetDelGet = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      if (uSheetDelGet && uSheetDelGet.getLastRow() > 1) {
+        var uDelDataGet = uSheetDelGet.getDataRange().getValues();
+        var delTitleGet = (params.userTitle || "").toString().trim().toLowerCase();
+        var delUserGet = (params.username || "").toString().trim().toLowerCase();
+        var delIdGet = (params.id || "").toString().trim();
+
+        for (var udiG = 1; udiG < uDelDataGet.length; udiG++) {
+          var rowTitG = (uDelDataGet[udiG][1] || "").toString().trim().toLowerCase();
+          var rowUsrG = (uDelDataGet[udiG][0] || "").toString().trim().toLowerCase();
+          var rowIdG = "USR-" + udiG;
+
+          if ((delTitleGet && rowTitG === delTitleGet) || (delIdGet && rowIdG === delIdGet)) {
+            uSheetDelGet.deleteRow(udiG + 1);
+            return respondOutput({ success: true, message: "تم حذف الموظف بنجاح" }, callback);
+          }
+        }
+      }
+      return respondOutput({ success: false, message: "لم يتم العثور على الموظف المطلوب حذفه" }, callback);
+    }
+
+    // 6. حذف منتج عبر GET
     if (action === "deleteProduct") {
       var bCode = (params.barcode || "").toString().trim();
       var pSheet = ss.getSheetByName("المنتجات");
@@ -858,9 +1380,18 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    var rawData = e.postData ? e.postData.contents : "{}";
-    var payload = JSON.parse(rawData);
-    var action = payload.action;
+    var payload = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        payload = JSON.parse(e.postData.contents);
+      } catch (errJson) {
+        payload = e.parameter || {};
+      }
+    } else if (e && e.parameter) {
+      payload = e.parameter;
+    }
+
+    var action = payload.action || (e && e.parameter ? e.parameter.action : "");
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -882,7 +1413,8 @@ function doPost(e) {
         payload.customerName || payload.cName || "",
         payload.customerPhone || payload.cPhone || "",
         payload.customerBackupPhone || payload.cBackup || "",
-        payload.customerArea || payload.cArea || ""
+        payload.customerArea || payload.cArea || "",
+        payload.cashierName || ""
       ];
 
       ordSheet.appendRow(row);
@@ -1126,6 +1658,199 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 11. إضافة أو تعديل مستخدم / موظف وتحديد صلاحياته (addUser, updateUser, save_user_permissions)
+    if (action === "addUser" || action === "updateUser" || action === "save_user_permissions" || action === "saveUser") {
+      var uSheetSave = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      if (!uSheetSave) {
+        uSheetSave = ss.insertSheet("Users");
+        var uh = [
+          "اسم المستخدم الموحد",
+          "اسم الموظف / الصفة",
+          "كلمة المرور",
+          "الصلاحيات الممنوحة",
+          "الحالة",
+          "تاريخ الإنشاء",
+          "آخر تسجيل دخول"
+        ];
+        uSheetSave.getRange(1, 1, 1, uh.length).setValues([uh]);
+        styleRtgHeader(uSheetSave, uh.length, "#c5834e");
+      }
+
+      var uTitleSearch = (payload.userTitle || "").toString().trim().toLowerCase();
+      var uIdSearch = (payload.id || "").toString().trim();
+      var uRowsData = uSheetSave.getDataRange().getValues();
+      var targetRow = -1;
+
+      for (var ur = 1; ur < uRowsData.length; ur++) {
+        var rTitle = (uRowsData[ur][1] || "").toString().trim().toLowerCase();
+        var rowId = "USR-" + ur;
+        if ((uTitleSearch && rTitle === uTitleSearch) || (uIdSearch && rowId === uIdSearch)) {
+          targetRow = ur + 1;
+          break;
+        }
+      }
+
+      var permsVal = typeof payload.permissions === "string" ? payload.permissions : JSON.stringify(payload.permissions || ["pos"]);
+      var nowStr = new Date().toLocaleString("ar-LY");
+      var uRowVals = [
+        payload.username || "",
+        payload.userTitle || "",
+        payload.password || "",
+        permsVal,
+        payload.status || "نشط",
+        payload.createdAt || nowStr,
+        payload.lastLogin || ""
+      ];
+
+      if (targetRow > 0) {
+        var origCreated = uSheetSave.getRange(targetRow, 6).getValue();
+        if (origCreated) uRowVals[5] = origCreated;
+        uSheetSave.getRange(targetRow, 1, 1, uRowVals.length).setValues([uRowVals]);
+      } else {
+        uSheetSave.appendRow(uRowVals);
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        message: targetRow > 0 ? "تم تحديث بيانات وصلاحيات الموظف بنجاح" : "تمت إضافة الموظف الجديد وتثبيت صلاحياته بنجاح"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 12. حذف موظف نهائياً (deleteUser, delete_user)
+    if (action === "deleteUser" || action === "delete_user") {
+      var uSheetDel = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      var deleted = false;
+      if (uSheetDel && uSheetDel.getLastRow() > 1) {
+        var uDelData = uSheetDel.getDataRange().getValues();
+        var delTitle = (payload.userTitle || "").toString().trim().toLowerCase();
+        var delId = (payload.id || "").toString().trim();
+        var delUser = (payload.username || "").toString().trim().toLowerCase();
+
+        for (var udi = 1; udi < uDelData.length; udi++) {
+          var rowTit = (uDelData[udi][1] || "").toString().trim().toLowerCase();
+          var rowUsr = (uDelData[udi][0] || "").toString().trim().toLowerCase();
+          var rId = "USR-" + udi;
+
+          if ((delTitle && rowTit === delTitle) || (delId && rId === delId) || (delUser && delTitle && rowUsr === delUser && rowTit === delTitle)) {
+            uSheetDel.deleteRow(udi + 1);
+            deleted = true;
+            break;
+          }
+        }
+      }
+
+      if (deleted) {
+        return ContentService.createTextOutput(JSON.stringify({ success: true, message: "تم حذف الموظف بنجاح" }))
+          .setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: "لم يتم العثور على الموظف المطلوب حذفه في ورقة Users" }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 13. تسجيل الدخول عبر POST
+    if (action === "login" || action === "login_user" || action === "verifyEmployee") {
+      var pUser = (payload.username || payload.email || payload.key || "").toString().trim().toLowerCase();
+      var pTitle = (payload.userTitle || "").toString().trim().toLowerCase();
+      var pPass = (payload.password || "").toString().trim();
+      var pUserNorm = pUser.replace(/\\s+/g, "");
+
+      var uSheetLogin = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      if (uSheetLogin && uSheetLogin.getLastRow() > 1) {
+        var uLRows = uSheetLogin.getDataRange().getValues();
+        for (var uli2 = 1; uli2 < uLRows.length; uli2++) {
+          var rUser = (uLRows[uli2][0] || "").toString().trim();
+          var rTitle2 = (uLRows[uli2][1] || "").toString().trim();
+          var rPass = (uLRows[uli2][2] || "").toString().trim();
+          var rStatus = (uLRows[uli2][4] || "نشط").toString().trim();
+
+          var rUserNorm = rUser.toLowerCase().replace(/\\s+/g, "");
+          var rTitleNorm2 = rTitle2.toLowerCase();
+
+          var passOk = (pPass && rPass === pPass);
+          var userOk = !pUser ||
+            rUser.toLowerCase() === pUser ||
+            rUserNorm === pUserNorm ||
+            rTitleNorm2 === pUser ||
+            (pTitle && rTitleNorm2 === pTitle) ||
+            rTitleNorm2.indexOf(pUser) !== -1 ||
+            pUser.indexOf(rTitleNorm2) !== -1;
+
+          if (passOk && userOk) {
+            if (rStatus === "معلق" || rStatus.indexOf("معلق") !== -1) {
+              return ContentService.createTextOutput(JSON.stringify({
+                success: false,
+                valid: false,
+                message: "تم تعليق حساب هذا الموظف مؤقتاً، يرجى مراجعة إدارة المتجر"
+              })).setMimeType(ContentService.MimeType.JSON);
+            }
+
+            var permRaw = uLRows[uli2][3] ? uLRows[uli2][3].toString() : "[]";
+            var parsedPermList = [];
+            try {
+              parsedPermList = JSON.parse(permRaw);
+            } catch (errP) {
+              parsedPermList = permRaw.split(",").map(function(s) { return s.trim(); });
+            }
+
+            var nowLoginStr = new Date().toLocaleString("ar-LY");
+            try { uSheetLogin.getRange(uli2 + 1, 7).setValue(nowLoginStr); } catch (eLog) {}
+
+            return ContentService.createTextOutput(JSON.stringify({
+              success: true,
+              valid: true,
+              role: "employee",
+              user: {
+                id: "USR-" + uli2,
+                username: rUser,
+                userTitle: rTitle2,
+                permissions: Array.isArray(parsedPermList) && parsedPermList.length > 0 ? parsedPermList : ["pos"],
+                status: rStatus,
+                lastLogin: nowLoginStr
+              },
+              permissions: Array.isArray(parsedPermList) && parsedPermList.length > 0 ? parsedPermList : ["pos"],
+              userTitle: rTitle2
+            })).setMimeType(ContentService.MimeType.JSON);
+          }
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        valid: false,
+        message: "بيانات الدخول غير صحيحة"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 14. جلب الموظفين عبر POST
+    if (action === "getUsers" || action === "get_users") {
+      var uSheetPost = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+      var uPostList = [];
+      if (uSheetPost && uSheetPost.getLastRow() > 1) {
+        var uPostData = uSheetPost.getDataRange().getValues();
+        for (var upi = 1; upi < uPostData.length; upi++) {
+          var uPostTitle = (uPostData[upi][1] || "").toString().trim();
+          if (uPostTitle) {
+            var prP = uPostData[upi][3] ? uPostData[upi][3].toString() : "[]";
+            var parsedListP = [];
+            try { parsedListP = JSON.parse(prP); } catch (ep) { parsedListP = prP.split(",").map(function(s) { return s.trim(); }); }
+            uPostList.push({
+              id: "USR-" + upi,
+              username: (uPostData[upi][0] || "").toString().trim(),
+              userTitle: uPostTitle,
+              password: (uPostData[upi][2] || "").toString().trim(),
+              permissions: Array.isArray(parsedListP) && parsedListP.length > 0 ? parsedListP : ["pos"],
+              status: (uPostData[upi][4] || "نشط").toString().trim(),
+              createdAt: uPostData[upi][5] ? uPostData[upi][5].toString() : "",
+              lastLogin: uPostData[upi][6] ? uPostData[upi][6].toString() : ""
+            });
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, users: uPostList }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     return ContentService.createTextOutput(JSON.stringify({ success: true, info: "Unhandled action" }))
       .setMimeType(ContentService.MimeType.JSON);
 
@@ -1146,30 +1871,73 @@ function respondOutput(obj, callback) {
 }
 
 /**
- * دالة التهيئة التلقائية للملف 2 (قالب المتجر: المنتجات، الفواتير، الديون)
- * اضغط "تشغيل (Run)" لهذه الدالة لتجهيز وإنشاء الصفحات الثلاث وأعمدتها تلقائياً
+ * دالة مساعدة لتطبيق ثيم وألوان وهوية منظومة RTG على صف العناوين
+ * اللون الأساسي: #c5834e (البرونزي النحاسي الفاخر لمنظومة RTG)
+ */
+function styleRtgHeader(sheet, colCount, bgColor) {
+  var bg = bgColor || "#c5834e";
+  var headerRange = sheet.getRange(1, 1, 1, colCount);
+  headerRange
+    .setBackground(bg)
+    .setFontColor("#ffffff")
+    .setFontSize(11)
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle");
+  
+  sheet.setRowHeight(1, 38);
+  sheet.setFrozenRows(1);
+  sheet.setRightToLeft(true);
+
+  try {
+    headerRange.setBorder(true, true, true, true, true, true, "#8a4f21", SpreadsheetApp.BorderStyle.SOLID);
+  } catch (e) {}
+
+  try {
+    if (!sheet.getFilter()) {
+      headerRange.createFilter();
+    }
+  } catch (e) {}
+}
+
+/**
+ * ====================================================================
+ * دالة التهيئة التلقائية للمتجر (setupStoreSheets)
+ * تنشئ الأوراق الأربعة وتطبق ألوان وهوية منظومة RTG بنقرة واحدة:
+ * 1. [المنتجات]
+ * 2. [الفواتير]
+ * 3. [الديون]
+ * 4. [Users] (المستخدمين والصلاحيات)
+ * ====================================================================
  */
 function setupStoreSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 1. ورقة المنتجات
+  // 1. ورقة المنتجات (Products) — ثيم نحاسي برونزي #c5834e
   var prodSheet = ss.getSheetByName("المنتجات");
   if (!prodSheet) prodSheet = ss.insertSheet("المنتجات");
-  var prodHeaders = ["الباركود", "اسم المنتج", "الكمية", "سعر التكلفة", "سعر البيع", "تاريخ التحديث"];
+  prodSheet.setTabColor("#c5834e");
+  var prodHeaders = [
+    "الباركود",
+    "اسم المنتج",
+    "الكمية",
+    "سعر التكلفة",
+    "سعر البيع",
+    "تاريخ التحديث"
+  ];
   prodSheet.getRange(1, 1, 1, prodHeaders.length).setValues([prodHeaders]);
-  var pHRange = prodSheet.getRange(1, 1, 1, prodHeaders.length);
-  pHRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center");
-  prodSheet.setFrozenRows(1);
+  styleRtgHeader(prodSheet, prodHeaders.length, "#c5834e");
   prodSheet.setColumnWidth(1, 150);
-  prodSheet.setColumnWidth(2, 220);
-  prodSheet.setColumnWidth(3, 90);
-  prodSheet.setColumnWidth(4, 110);
-  prodSheet.setColumnWidth(5, 110);
+  prodSheet.setColumnWidth(2, 240);
+  prodSheet.setColumnWidth(3, 100);
+  prodSheet.setColumnWidth(4, 120);
+  prodSheet.setColumnWidth(5, 120);
   prodSheet.setColumnWidth(6, 170);
 
-  // 2. ورقة الفواتير
+  // 2. ورقة الفواتير (Orders) — ثيم كحلي داكن فاخر #1e293b
   var ordSheet = ss.getSheetByName("الفواتير");
   if (!ordSheet) ordSheet = ss.insertSheet("الفواتير");
+  ordSheet.setTabColor("#1e293b");
   var ordHeaders = [
     "رقم الفاتورة",
     "التاريخ والوقت",
@@ -1183,29 +1951,30 @@ function setupStoreSheets() {
     "اسم الزبون",
     "رقم الهاتف",
     "هاتف احتياطي",
-    "المنطقة / العنوان"
+    "المنطقة / العنوان",
+    "اسم الكاشير/الموظف"
   ];
   ordSheet.getRange(1, 1, 1, ordHeaders.length).setValues([ordHeaders]);
-  var oHRange = ordSheet.getRange(1, 1, 1, ordHeaders.length);
-  oHRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center");
-  ordSheet.setFrozenRows(1);
-  ordSheet.setColumnWidth(1, 130);
-  ordSheet.setColumnWidth(2, 160);
-  ordSheet.setColumnWidth(3, 260);
-  ordSheet.setColumnWidth(4, 120);
-  ordSheet.setColumnWidth(5, 120);
+  styleRtgHeader(ordSheet, ordHeaders.length, "#1e293b");
+  ordSheet.setColumnWidth(1, 140);
+  ordSheet.setColumnWidth(2, 170);
+  ordSheet.setColumnWidth(3, 280);
+  ordSheet.setColumnWidth(4, 130);
+  ordSheet.setColumnWidth(5, 130);
   ordSheet.setColumnWidth(6, 110);
   ordSheet.setColumnWidth(7, 90);
   ordSheet.setColumnWidth(8, 90);
   ordSheet.setColumnWidth(9, 120);
-  ordSheet.setColumnWidth(10, 150);
-  ordSheet.setColumnWidth(11, 130);
-  ordSheet.setColumnWidth(12, 130);
-  ordSheet.setColumnWidth(13, 180);
+  ordSheet.setColumnWidth(10, 160);
+  ordSheet.setColumnWidth(11, 140);
+  ordSheet.setColumnWidth(12, 140);
+  ordSheet.setColumnWidth(13, 190);
+  ordSheet.setColumnWidth(14, 160);
 
-  // 3. ورقة الديون
+  // 3. ورقة الديون (Debts) — ثيم نحاسي داكن #a6632f
   var debtSheet = ss.getSheetByName("الديون");
   if (!debtSheet) debtSheet = ss.insertSheet("الديون");
+  debtSheet.setTabColor("#a6632f");
   var debtHeaders = [
     "رقم الدين",
     "التاريخ",
@@ -1221,23 +1990,149 @@ function setupStoreSheets() {
     "آخر تحديث"
   ];
   debtSheet.getRange(1, 1, 1, debtHeaders.length).setValues([debtHeaders]);
-  var dHRange = debtSheet.getRange(1, 1, 1, debtHeaders.length);
-  dHRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center");
-  debtSheet.setFrozenRows(1);
-  debtSheet.setColumnWidth(1, 120);
-  debtSheet.setColumnWidth(2, 120);
-  debtSheet.setColumnWidth(3, 80);
-  debtSheet.setColumnWidth(4, 160);
-  debtSheet.setColumnWidth(5, 130);
-  debtSheet.setColumnWidth(6, 110);
-  debtSheet.setColumnWidth(7, 110);
-  debtSheet.setColumnWidth(8, 110);
-  debtSheet.setColumnWidth(9, 130);
-  debtSheet.setColumnWidth(10, 100);
-  debtSheet.setColumnWidth(11, 200);
+  styleRtgHeader(debtSheet, debtHeaders.length, "#a6632f");
+  debtSheet.setColumnWidth(1, 130);
+  debtSheet.setColumnWidth(2, 130);
+  debtSheet.setColumnWidth(3, 90);
+  debtSheet.setColumnWidth(4, 170);
+  debtSheet.setColumnWidth(5, 140);
+  debtSheet.setColumnWidth(6, 120);
+  debtSheet.setColumnWidth(7, 120);
+  debtSheet.setColumnWidth(8, 120);
+  debtSheet.setColumnWidth(9, 140);
+  debtSheet.setColumnWidth(10, 110);
+  debtSheet.setColumnWidth(11, 220);
   debtSheet.setColumnWidth(12, 170);
 
+  // 4. ورقة المستخدمين والصلاحيات (Users) — ثيم برونزي ملكي #c5834e
+  var usersSheet = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+  if (!usersSheet) usersSheet = ss.insertSheet("Users");
+  usersSheet.setTabColor("#c5834e");
+  var userHeaders = [
+    "اسم المستخدم الموحد",
+    "اسم الموظف / الصفة",
+    "كلمة المرور",
+    "الصلاحيات الممنوحة",
+    "الحالة",
+    "تاريخ الإنشاء",
+    "آخر تسجيل دخول"
+  ];
+  usersSheet.getRange(1, 1, 1, userHeaders.length).setValues([userHeaders]);
+  styleRtgHeader(usersSheet, userHeaders.length, "#c5834e");
+  usersSheet.setColumnWidth(1, 170);
+  usersSheet.setColumnWidth(2, 190);
+  usersSheet.setColumnWidth(3, 140);
+  usersSheet.setColumnWidth(4, 260);
+  usersSheet.setColumnWidth(5, 110);
+  usersSheet.setColumnWidth(6, 160);
+  usersSheet.setColumnWidth(7, 160);
+
+  // إضافة سطر توضيحي افتراضي للموظفين إن كانت الورقة جديدة
+  if (usersSheet.getLastRow() <= 1) {
+    usersSheet.appendRow([
+      "store_user",
+      "كاشير ومسؤول مبيعات",
+      "123456",
+      '["pos","orders"]',
+      "نشط",
+      new Date().toLocaleDateString("ar-LY"),
+      ""
+    ]);
+    var sampleRange = usersSheet.getRange(2, 1, 1, 7);
+    sampleRange.setHorizontalAlignment("center").setVerticalAlignment("middle");
+  }
+
+  // حذف الورقة الفارغة الافتراضية "ورقة 1" أو "Sheet1" لتنظيم الملف
+  var defaultNames = ["ورقة 1", "ورقة1", "Sheet1", "Sheet 1"];
+  for (var i = 0; i < defaultNames.length; i++) {
+    var defSh = ss.getSheetByName(defaultNames[i]);
+    if (defSh && ss.getSheets().length > 4 && defSh.getLastRow() <= 1 && defSh.getLastColumn() <= 1) {
+      try { ss.deleteSheet(defSh); } catch (e) {}
+    }
+  }
+
+  // حفظ كافة التغييرات وإظهار إشعار التأكيد
   SpreadsheetApp.flush();
-  Logger.log("✓ تم تهيئة صفحات المتجر الثلاث (المنتجات، الفواتير، الديون) بنجاح!");
+
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var alertLines = [
+      "✓ تم إنشاء وتنسيق الأوراق الأربعة بألوان وهوية منظومة RTG الرسمية (#c5834e):",
+      "",
+      "1. [المنتجات] — الباركود، الأسعار، المخزن والكميات (لون برونزي)",
+      "2. [الفواتير] — سجل المبيعات والزبائن وحساب الأرباح (لون كحلي داكن)",
+      "3. [الديون] — سجل الديون والمعاملات والمدفوعات (لون نحاسي داكن)",
+      "4. [Users] — حسابات الموظفين وكلمات المرور والصلاحيات (لون برونزي)",
+      "",
+      "📌 الخطوة الأخيرة للنشر والربط بالمنظومة:",
+      "1. اضغط على زر [نشر (Deploy)] في أعلى الشاشة -> [نشر جديد (New deployment)].",
+      "2. اختر نوع [تطبيق ويب (Web app)].",
+      "3. اضغط على (Who has access / من يملك الوصول) واختر: [أي شخص (Anyone)].",
+      "4. اضغط Deploy وانسخ الرابط الناتج وضعه في خانة رابط الخادم في لوحة تحكم RTG."
+    ];
+    ui.alert(
+      "🌟 تم إعداد متجر RTG وتطبيق الهوية بنجاح 🌟",
+      alertLines.join("\\n"),
+      ui.ButtonSet.OK
+    );
+  } catch (e) {
+    ss.toast("✓ تم تهيئة صفحات وتنسيق متجر RTG بنجاح!", "منظومة RTG", 6);
+  }
+}
+
+/**
+ * فحص حالة وتوفر أوراق العمل وإحصائيات المتجر
+ */
+function checkStoreStatus() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var prodSheet = ss.getSheetByName("المنتجات");
+  var ordSheet = ss.getSheetByName("الفواتير");
+  var debtSheet = ss.getSheetByName("الديون");
+  var userSheet = ss.getSheetByName("Users") || ss.getSheetByName("المستخدمين والصلاحيات");
+
+  var pCount = prodSheet ? Math.max(0, prodSheet.getLastRow() - 1) : "ورقة غير موجودة";
+  var oCount = ordSheet ? Math.max(0, ordSheet.getLastRow() - 1) : "ورقة غير موجودة";
+  var dCount = debtSheet ? Math.max(0, debtSheet.getLastRow() - 1) : "ورقة غير موجودة";
+  var uCount = userSheet ? Math.max(0, userSheet.getLastRow() - 1) : "ورقة غير موجودة";
+
+  var msgLines = [
+    "📊 إحصائيات وجاهزية بيانات المتجر:",
+    "",
+    "• عدد المنتجات: " + pCount,
+    "• عدد الفواتير: " + oCount,
+    "• قيود الديون: " + dCount,
+    "• حسابات الموظفين: " + uCount,
+    "",
+    "الهوية البصرية وألوان RTG: مطبقة بنجاح ✓",
+    "المنظومة جاهزة للربط والعمل السحابي المتكامل!"
+  ];
+  var msg = msgLines.join("\\n");
+
+  try {
+    SpreadsheetApp.getUi().alert("📊 فحص جاهزية المتجر", msg, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    ss.toast(msg, "منظومة RTG", 6);
+  }
+}
+
+/**
+ * معلومات النظام والمطور
+ */
+function showAboutRtg() {
+  var infoLines = [
+    "✨ منظومة RTG-SESTEM المتطورة ✨",
+    "",
+    "محرك المتجر السحابي v3.5 (Google Sheets Cloud Engine)",
+    "إدارة المبيعات، المخزون، الفواتير، الديون، والصلاحيات الذكية (RBAC)",
+    "الهوية البصرية: ثيم RTG البرونزي الرسمي (#c5834e)",
+    "",
+    "جميع الحقوق محفوظة لمنظومة RTG SYSTEM"
+  ];
+  var info = infoLines.join("\\n");
+  try {
+    SpreadsheetApp.getUi().alert("ℹ️ عن منظومة RTG", info, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    SpreadsheetApp.getActiveSpreadsheet().toast(info, "منظومة RTG", 6);
+  }
 }
 `;

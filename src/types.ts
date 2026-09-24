@@ -32,6 +32,28 @@ export interface Order {
   deliveryType?: "فوري" | "توصيل" | "مؤجل";
   returnNote?: string;
   cartItems?: CartItem[];
+  cashierName?: string;
+}
+
+export type StorePermission = "pos" | "orders" | "inventory" | "dashboard" | "debts";
+
+export interface StoreUser {
+  id: string;
+  username: string; // Store unified username (e.g. from Master Sheet)
+  userTitle: string; // Employee Name or Role (e.g. "كاشير 1", "أمين المخزن أحمد", "المحاسب")
+  password: string; // Employee specific password
+  permissions: StorePermission[]; // Granted permissions
+  status?: "نشط" | "معلق";
+  createdAt?: string;
+  lastLogin?: string;
+}
+
+export interface UserSession {
+  role: "admin" | "employee";
+  userTitle: string;
+  username: string;
+  permissions: StorePermission[];
+  loginAt?: string;
 }
 
 export interface Debt {
@@ -55,7 +77,13 @@ export interface ToastMessage {
   type: "success" | "error" | "info";
 }
 
-export type ActiveTab = "pos" | "orders" | "inventory" | "dashboard" | "debts";
+export type ActiveTab =
+  | "pos"
+  | "orders"
+  | "inventory"
+  | "dashboard"
+  | "debts"
+  | "users_management";
 
 export interface StoreSubscriber {
   id: string;

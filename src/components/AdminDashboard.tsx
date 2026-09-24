@@ -1209,31 +1209,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                 {/* File 1 */}
                 <div className="bg-[#090d16] p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#c5834e]">
-                    <span className="w-5 h-5 rounded-full bg-[#c5834e]/20 flex items-center justify-center text-[10px]">1</span>
-                    الملف الأول: خادم المشتركين المركزي (Master Subscribers)
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-[#c5834e]">
+                      <span className="w-5 h-5 rounded-full bg-[#c5834e]/20 flex items-center justify-center text-[10px]">1</span>
+                      الملف الأول: خادم المشتركين المركزي (Master Server v4.5)
+                    </div>
+                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full text-[10px] font-bold">
+                      Two-Tier Auth + ألوان RTG
+                    </span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    ملف واحد خاص بك كـ Admin، يحتوي على ورقة عمل باسم <strong>&quot;المشتركون&quot;</strong>.
-                    يسجل فيه كود ترخيص كل مشترك، يوزره، باسورد، تاريخ البدء والانتهاء، ورابط خادم متجره الخاص.
+                    ملف مركزي خاص بإدارة المنظومة. يحتوي على <strong>زر وقائمة [⚙️ منظومة RTG] في أعلى الشيت</strong>، بضغطة واحدة ينشئ وينسق الأوراق الرسمية بألوان المنظومة (#c5834e و #1e293b). مدمج به ميزة <strong>التحقق الذكي المزدوج (Two-Tier Auth)</strong>: عند إدخال كلمة سر موظف، يتصل الخادم تلقائياً برابط المتجر ويفحص ورقة <span className="text-white font-mono font-bold">Users</span> ليدخله مباشرة بصلاحياته!
                   </p>
-                  <div className="text-[10px] text-slate-500 font-mono bg-slate-900/80 p-2 rounded border border-slate-800">
-                    العناوين: [كود المتجر] [اسم المستخدم] [كلمة المرور] [اسم المتجر] [الهاتف] [رابط الخادم الخاص] [تاريخ البدء] [تاريخ الانتهاء] [الباقة] [الحالة]
+                  <div className="text-[10px] text-[#c5834e] font-bold bg-[#c5834e]/10 p-2 rounded-lg border border-[#c5834e]/30 flex flex-wrap gap-1.5 items-center">
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[المشتركون]</span>
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[الإعدادات وبيانات المنظومة]</span>
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[باقات وأسعار الاشتراكات]</span>
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[التواصل_الاجتماعي]</span>
                   </div>
                 </div>
 
                 {/* File 2 */}
                 <div className="bg-[#090d16] p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
-                    <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-10px">2</span>
-                    الملف الثاني: قالب المتجر المنفرد (Store Engine Template)
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-[#c5834e]">
+                      <span className="w-5 h-5 rounded-full bg-[#c5834e]/20 flex items-center justify-center text-[10px]">2</span>
+                      الملف الثاني: محرك المتجر الخاص (Store Engine v3.5)
+                    </div>
+                    <span className="px-2 py-0.5 bg-[#c5834e]/20 text-[#c5834e] border border-[#c5834e]/40 rounded-full text-[10px] font-bold">
+                      زر تهيئة فوري + ألوان RTG
+                    </span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    ملف مستقل لكل متجر مشترك لضمان خصوصية بياناته 100%. تنشئه له بنسخ القالب، ويحتوي على 3 أوراق عمل:
-                    <strong>&quot;المنتجات&quot;</strong> و <strong>&quot;الفواتير&quot;</strong> و <strong>&quot;الديون&quot;</strong>.
+                    ملف مستقل لكل متجر مشترك لضمان خصوصية بياناته 100%. عند لصق الكود وحفظه، يظهر للمشترك <strong>زر وقائمة [⚙️ منظومة RTG] في أعلى الشيت</strong>، بنقرة واحدة ينشئ وينسق 4 أوراق عمل رسمية بألوان المنظومة النحاسية (<span className="text-[#c5834e] font-mono font-bold">#c5834e</span>):
                   </p>
-                  <div className="text-[10px] text-slate-500 font-mono bg-slate-900/80 p-2 rounded border border-slate-800">
-                    يتم تثبيت محرك المتجر الخاص به وتزويده برابط تطبيقه في لوحة الأدمن.
+                  <div className="text-[10px] text-[#c5834e] font-bold bg-[#c5834e]/10 p-2 rounded-lg border border-[#c5834e]/30 flex flex-wrap gap-1.5 items-center">
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[المنتجات]</span>
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[الفواتير]</span>
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[الديون]</span>
+                    <span className="px-1.5 py-0.5 bg-[#121829] rounded text-white">[Users - الموظفين والصلاحيات]</span>
                   </div>
                 </div>
               </div>
@@ -1281,6 +1295,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>نسخ الكود البرمجي بالكامل</span>
                 </button>
               </div>
+
+              {/* Feature Highlights Banner */}
+              {activeScriptView === "master" && (
+                <div className="bg-[#161f30] px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="font-bold text-[#c5834e]">التحقق الثنائي الذكي المزدوج (Two-Tier Auth):</span>
+                    <span className="text-[11px] text-slate-300">
+                      إذا كتب الموظف كلمة مروره الخاصة، يتصل الخادم المركزي تلقائياً برابط المتجر ويفحص ورقة <strong className="text-white bg-slate-800 px-1 py-0.5 rounded font-mono">Users</strong> ليدخله مباشرة بصلاحياته. كما يظهر زر وقائمة <strong className="text-white bg-slate-800 px-1 py-0.5 rounded">[⚙️ منظومة RTG]</strong> لتهيئة الشيت بألوان المنظومة الرسمية!
+                    </span>
+                  </div>
+                  <span className="hidden sm:inline-block text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                    v4.5 Two-Tier & Auto-Setup
+                  </span>
+                </div>
+              )}
+
+              {activeScriptView === "store" && (
+                <div className="bg-[#161f30] px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#c5834e] animate-pulse"></span>
+                    <span className="font-bold text-[#c5834e]">التهيئة التلقائية وألوان RTG:</span>
+                    <span className="text-[11px] text-slate-300">
+                      يظهر زر وقائمة <strong className="text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">[⚙️ منظومة RTG]</strong> في أعلى شيت المتجر، بضغطة واحدة ينشئ الأوراق الأربعة ([المنتجات]، [الفواتير]، [الديون]، [Users]) بألوان وهوية المنظومة الرسمية (#c5834e).
+                    </span>
+                  </div>
+                  <span className="hidden sm:inline-block text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                    v3.5 Auto-Setup & RBAC Ready
+                  </span>
+                </div>
+              )}
 
               {/* Code Box */}
               <div className="p-4 bg-[#090d16] font-mono text-xs text-slate-300 overflow-x-auto max-h-[420px] select-all leading-relaxed whitespace-pre" dir="ltr">

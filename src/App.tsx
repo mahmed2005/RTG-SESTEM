@@ -8,6 +8,8 @@ import {
   ActiveTab,
   StoreSubscriber,
   SubscriptionPlan,
+  StoreUser,
+  UserSession,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_DEBTS } from "./data/initialData";
 import {
@@ -52,6 +54,7 @@ import { OrdersList } from "./components/OrdersList";
 import { InventoryManager } from "./components/InventoryManager";
 import { DashboardReports } from "./components/DashboardReports";
 import { DebtsTracker } from "./components/DebtsTracker";
+import { UsersManagement } from "./components/UsersManagement";
 import { PrintModal } from "./components/PrintModal";
 import { ReturnModal } from "./components/ReturnModal";
 import { LogoutModal } from "./components/LogoutModal";
@@ -67,6 +70,8 @@ const STORAGE_KEYS = {
   SCRIPT_URL: "rtg_script_url",
   SHOP_NAME: "rtg_shop_name",
   THEME: "rtg_theme_mode",
+  USERS: "rtg_store_users",
+  SESSION: "rtg_user_session",
 };
 
 export default function App() {
@@ -174,6 +179,16 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, finalUrl);
     localStorage.setItem(STORAGE_KEYS.SHOP_NAME, sub.storeName);
 
+    const adminSession: UserSession = {
+      role: "admin",
+      userTitle: "المالك / المدير العام",
+      username: sub.username,
+      permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
+      loginAt: new Date().toISOString(),
+    };
+    setCurrentUser(adminSession);
+    setActiveTab("pos");
+
     setApiUrl(finalUrl);
     setShopName(sub.storeName);
     setIsDemoMode(false);
@@ -189,6 +204,9 @@ export default function App() {
           if (cloudData.products) setProducts(cloudData.products);
           if (cloudData.orders) setOrders(cloudData.orders);
           if (cloudData.debts) setDebts(cloudData.debts);
+          if (cloudData.users && Array.isArray(cloudData.users)) {
+            setUsers(cloudData.users);
+          }
           const pCount = cloudData.products ? Object.keys(cloudData.products).length : 0;
           showToast(`✓ تم جلب بيانات المتجر بنجاح (${pCount} منتج)`, "success");
         }
@@ -252,6 +270,29 @@ export default function App() {
     return [];
   });
 
+  // Store Users & Session State for RBAC
+  const [users, setUsers] = useState<StoreUser[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.USERS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SESSION);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {}
+    }
+    return null;
+  });
+
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -289,6 +330,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
   }, [debts]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.SESSION);
+    }
+  }, [currentUser]);
 
   // Load Saved Theme and License on mount
   useEffect(() => {
@@ -340,6 +393,16 @@ export default function App() {
   const handleSplashComplete = () => {
     const savedKey = localStorage.getItem(STORAGE_KEYS.LICENSE_KEY);
     if (savedKey) {
+      if (!currentUser) {
+        const savedShop = localStorage.getItem(STORAGE_KEYS.SHOP_NAME) || "RTG-SYSTEM";
+        setCurrentUser({
+          role: "admin",
+          userTitle: "المالك / المدير العام",
+          username: savedKey,
+          permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
+          loginAt: new Date().toISOString(),
+        });
+      }
       setScreen("app");
     } else {
       setScreen("landing");
@@ -353,8 +416,16 @@ export default function App() {
     setProducts(INITIAL_PRODUCTS);
     setOrders(INITIAL_ORDERS);
     setDebts(INITIAL_DEBTS);
+    setCurrentUser({
+      role: "admin",
+      userTitle: "المالك (تجريبي)",
+      username: "demo_store",
+      permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
+      loginAt: new Date().toISOString(),
+    });
+    setActiveTab("pos");
     setScreen("app");
-    showToast("🎮 مرحباً بك في الوضع التجريبي — بيانات تجريبية جاهزة للاستخدام", "info", 4500);
+    showToast("🎮 مرحباً بك في الوضع التجريبي — كافة الصلاحيات مفتوحة للتجربة", "info", 4500);
   };
 
   // Login Success
@@ -362,8 +433,9 @@ export default function App() {
     licenseKey: string,
     scriptUrl: string,
     verifiedShopName: string,
-    _email: string,
-    subscriber?: StoreSubscriber
+    storeUsernameOrEmail: string,
+    subscriber?: StoreSubscriber,
+    userSession?: UserSession
   ) => {
     const rawUrl = subscriber?.cloudUrl || scriptUrl;
     const finalApiUrl = rawUrl ? normalizeScriptUrl(rawUrl).url : "";
@@ -373,12 +445,45 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, finalApiUrl);
     localStorage.setItem(STORAGE_KEYS.SHOP_NAME, finalShopName);
 
+    // Set User Session
+    const activeSession: UserSession = userSession || {
+      role: "admin",
+      userTitle: "المالك / المدير العام",
+      username: subscriber?.username || storeUsernameOrEmail || licenseKey,
+      permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
+      loginAt: new Date().toISOString(),
+    };
+    setCurrentUser(activeSession);
+
+    // Determine initial active tab based on user's permissions
+    if (activeSession.role === "employee") {
+      const perms = activeSession.permissions;
+      if (perms.includes("pos")) {
+        setActiveTab("pos");
+      } else if (perms.includes("orders")) {
+        setActiveTab("orders");
+      } else if (perms.includes("inventory")) {
+        setActiveTab("inventory");
+      } else if (perms.includes("dashboard")) {
+        setActiveTab("dashboard");
+      } else if (perms.includes("debts")) {
+        setActiveTab("debts");
+      }
+    } else {
+      setActiveTab("pos");
+    }
+
     setApiUrl(finalApiUrl);
     setShopName(finalShopName);
     setIsDemoMode(false);
     setIsLoginOpen(false);
     setScreen("app");
-    showToast(`✓ مرحباً بك في متجر "${finalShopName}"`, "success");
+    showToast(
+      activeSession.role === "admin"
+        ? `✓ مرحباً بك مجدداً كمدير لمتجر "${finalShopName}"`
+        : `✓ مرحباً بك يا ${activeSession.userTitle} في متجر "${finalShopName}"`,
+      "success"
+    );
 
     // Automatically sync live data from the store's Google Sheet
     if (finalApiUrl) {
@@ -390,6 +495,9 @@ export default function App() {
           if (cloudData.products) setProducts(cloudData.products);
           if (cloudData.orders) setOrders(cloudData.orders);
           if (cloudData.debts) setDebts(cloudData.debts);
+          if (cloudData.users && Array.isArray(cloudData.users)) {
+            setUsers(cloudData.users);
+          }
           const pCount = cloudData.products ? Object.keys(cloudData.products).length : 0;
           const oCount = cloudData.orders ? cloudData.orders.length : 0;
           showToast(`✓ تم استلام بيانات متجرك بنجاح (${pCount} منتج، ${oCount} فاتورة)`, "success", 4000);
@@ -429,6 +537,9 @@ export default function App() {
         if (cloudData.products) setProducts(cloudData.products);
         if (cloudData.orders) setOrders(cloudData.orders);
         if (cloudData.debts) setDebts(cloudData.debts);
+        if (cloudData.users && Array.isArray(cloudData.users)) {
+          setUsers(cloudData.users);
+        }
 
         showToast(
           `✓ اكتملت المزامنة بنجاح! (${pCount} منتج، ${oCount} فاتورة، ${dCount} دين)`,
@@ -451,6 +562,9 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEYS.LICENSE_KEY);
     localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
     localStorage.removeItem(STORAGE_KEYS.SHOP_NAME);
+    localStorage.removeItem(STORAGE_KEYS.SESSION);
+    setCurrentUser(null);
+    setUsers([]);
     setIsLogoutOpen(false);
     setIsDemoMode(false);
     setApiUrl("");
@@ -959,7 +1073,17 @@ export default function App() {
       )}
 
       {/* Screen 3: Main Application */}
-      {screen === "app" && (
+      {screen === "app" && (() => {
+        const isOwnerAdmin = currentUser?.role === "admin";
+        const userPerms = currentUser?.permissions || ["pos", "orders", "inventory", "dashboard", "debts"];
+        const canAccessPos = isOwnerAdmin || userPerms.includes("pos");
+        const canAccessOrders = isOwnerAdmin || userPerms.includes("orders");
+        const canAccessInventory = isOwnerAdmin || userPerms.includes("inventory");
+        const canAccessDashboard = isOwnerAdmin || userPerms.includes("dashboard");
+        const canAccessDebts = isOwnerAdmin || userPerms.includes("debts");
+        const canAccessUsers = isOwnerAdmin;
+
+        return (
         <div className="min-h-screen flex flex-col lg:flex-row w-full overflow-x-hidden">
           {/* Desktop Professional Sidebar */}
           <aside className="hidden lg:flex w-64 bg-white dark:bg-[#0d121f] text-slate-700 dark:text-slate-300 flex-col shrink-0 border-l border-slate-200 dark:border-slate-800 z-40 sticky top-0 h-screen transition-colors duration-200">
@@ -980,123 +1104,182 @@ export default function App() {
                 القائمة الرئيسية
               </div>
 
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  soundFx.playClick();
-                  setActiveTab("pos");
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
-                  activeTab === "pos"
-                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <i className="fa-solid fa-cash-register text-sm w-4 text-center"></i>
-                  <span>كشير البيع المباشر</span>
-                </div>
-                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400">POS</span>
-              </motion.button>
+              {canAccessPos && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("pos");
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
+                    activeTab === "pos"
+                      ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-cash-register text-sm w-4 text-center"></i>
+                    <span>كشير البيع المباشر</span>
+                  </div>
+                  <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400">POS</span>
+                </motion.button>
+              )}
 
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  soundFx.playClick();
-                  setActiveTab("orders");
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
-                  activeTab === "orders"
-                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <i className="fa-solid fa-receipt text-sm w-4 text-center"></i>
-                  <span>سجل الفواتير</span>
-                </div>
-                <span className="text-[10px] bg-[#c5834e]/20 text-[#c5834e] px-2 py-0.5 rounded-full font-mono font-bold">
-                  {orders.length}
-                </span>
-              </motion.button>
+              {canAccessOrders && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("orders");
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
+                    activeTab === "orders"
+                      ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-receipt text-sm w-4 text-center"></i>
+                    <span>سجل الفواتير</span>
+                  </div>
+                  <span className="text-[10px] bg-[#c5834e]/20 text-[#c5834e] px-2 py-0.5 rounded-full font-mono font-bold">
+                    {orders.length}
+                  </span>
+                </motion.button>
+              )}
 
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  soundFx.playClick();
-                  setActiveTab("inventory");
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
-                  activeTab === "inventory"
-                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <i className="fa-solid fa-boxes-stacked text-sm w-4 text-center"></i>
-                  <span>إدارة المخزن والجرد</span>
-                </div>
-                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400 font-mono">
-                  {Object.keys(products).length}
-                </span>
-              </motion.button>
+              {canAccessInventory && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("inventory");
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
+                    activeTab === "inventory"
+                      ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-boxes-stacked text-sm w-4 text-center"></i>
+                    <span>إدارة المخزن والجرد</span>
+                  </div>
+                  <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400 font-mono">
+                    {Object.keys(products).length}
+                  </span>
+                </motion.button>
+              )}
 
-              <div className="pt-4 pb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                التقارير والديون
-              </div>
-
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  soundFx.playClick();
-                  setActiveTab("dashboard");
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
-                  activeTab === "dashboard"
-                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <i className="fa-solid fa-chart-pie text-sm w-4 text-center"></i>
-                  <span>لوحة التقارير المالية</span>
+              {(canAccessDashboard || canAccessDebts) && (
+                <div className="pt-4 pb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  التقارير والديون
                 </div>
-              </motion.button>
+              )}
 
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  soundFx.playClick();
-                  setActiveTab("debts");
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
-                  activeTab === "debts"
-                    ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <i className="fa-solid fa-hand-holding-dollar text-sm w-4 text-center"></i>
-                  <span>سجل الديون والمعاملات</span>
-                </div>
-                <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full font-mono font-bold">
-                  {debts.length}
-                </span>
-              </motion.button>
+              {canAccessDashboard && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("dashboard");
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
+                    activeTab === "dashboard"
+                      ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-chart-pie text-sm w-4 text-center"></i>
+                    <span>لوحة التقارير المالية</span>
+                  </div>
+                </motion.button>
+              )}
+
+              {canAccessDebts && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setActiveTab("debts");
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
+                    activeTab === "debts"
+                      ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-hand-holding-dollar text-sm w-4 text-center"></i>
+                    <span>سجل الديون والمعاملات</span>
+                  </div>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full font-mono font-bold">
+                    {debts.length}
+                  </span>
+                </motion.button>
+              )}
+
+              {/* Dynamic RBAC: Employee & Permissions Management (Store Owner Admin Only) */}
+              {canAccessUsers && (
+                <>
+                  <div className="pt-4 pb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    إدارة النظام والموظفين
+                  </div>
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("users_management");
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-right cursor-pointer ${
+                      activeTab === "users_management"
+                        ? "bg-[#c5834e]/15 text-[#c5834e] border-r-4 border-[#c5834e] shadow-sm font-extrabold"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <i className="fa-solid fa-users-gear text-sm w-4 text-center text-[#c5834e]"></i>
+                      <span>إدارة الموظفين والصلاحيات</span>
+                    </div>
+                    <span className="text-[10px] bg-[#c5834e]/20 text-[#c5834e] px-2 py-0.5 rounded-full font-mono font-bold">
+                      {users.length}
+                    </span>
+                  </motion.button>
+                </>
+              )}
             </nav>
 
             {/* Sidebar User Footer */}
             <div className="p-4 bg-slate-50 dark:bg-slate-950/70 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#c5834e] flex items-center justify-center text-xs text-white font-bold shadow-sm">
-                  RTG
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs text-white font-bold shadow-sm ${
+                    isOwnerAdmin
+                      ? "bg-gradient-to-tr from-[#c5834e] to-[#e6a570]"
+                      : "bg-gradient-to-tr from-blue-600 to-indigo-500"
+                  }`}
+                >
+                  {isOwnerAdmin ? (
+                    <i className="fa-solid fa-crown text-[11px]"></i>
+                  ) : (
+                    <i className="fa-solid fa-user-tie text-[11px]"></i>
+                  )}
                 </div>
                 <div className="flex flex-col text-right">
-                  <span className="text-xs text-slate-900 dark:text-white font-bold truncate max-w-[110px]">
-                    {isDemoMode ? "وضع تجريبي" : shopName}
+                  <span
+                    className="text-xs text-slate-900 dark:text-white font-bold truncate max-w-[110px]"
+                    title={currentUser?.userTitle || (isOwnerAdmin ? "المالك / المدير" : "موظف")}
+                  >
+                    {currentUser?.userTitle || (isOwnerAdmin ? "المالك / المدير" : "موظف")}
                   </span>
-                  <span className="text-[10px] text-slate-400">
-                    {isDemoMode ? "حساب مؤقت" : "ترخيص معتمد"}
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isOwnerAdmin ? "bg-[#c5834e]" : "bg-blue-400"
+                      }`}
+                    ></span>
+                    {isOwnerAdmin ? "مالك المتجر (100%)" : "موظف بصلاحيات"}
                   </span>
                 </div>
               </div>
@@ -1145,6 +1328,21 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                {/* User Role Badge in Header */}
+                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/60 rounded-full text-[11px] font-bold">
+                  <i
+                    className={`fa-solid ${
+                      isOwnerAdmin ? "fa-crown text-amber-500" : "fa-id-badge text-[#c5834e]"
+                    } text-xs`}
+                  ></i>
+                  <span className="text-slate-700 dark:text-slate-200">
+                    {currentUser?.userTitle || (isOwnerAdmin ? "المالك" : "موظف")}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 text-[#c5834e] font-mono">
+                    {currentUser?.username}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
@@ -1204,112 +1402,149 @@ export default function App() {
               className="lg:hidden bg-white/95 dark:bg-[#0d121f]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 py-2 sticky top-16 z-20 transition-colors duration-200 shadow-xs"
             >
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth touch-pan-x py-0.5">
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    soundFx.playClick();
-                    setActiveTab("pos");
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    activeTab === "pos"
-                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  <i className="fa-solid fa-cash-register text-xs"></i>
-                  <span>كاشير البيع</span>
-                </motion.button>
+                {canAccessPos && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("pos");
+                    }}
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      activeTab === "pos"
+                        ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <i className="fa-solid fa-cash-register text-xs"></i>
+                    <span>كاشير البيع</span>
+                  </motion.button>
+                )}
 
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    soundFx.playClick();
-                    setActiveTab("orders");
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    activeTab === "orders"
-                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  <i className="fa-solid fa-receipt text-xs"></i>
-                  <span>الفواتير</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                {canAccessOrders && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("orders");
+                    }}
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                       activeTab === "orders"
-                        ? "bg-white/20 text-white"
-                        : "bg-[#c5834e]/15 text-[#c5834e]"
+                        ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                     }`}
                   >
-                    {orders.length}
-                  </span>
-                </motion.button>
+                    <i className="fa-solid fa-receipt text-xs"></i>
+                    <span>الفواتير</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        activeTab === "orders"
+                          ? "bg-white/20 text-white"
+                          : "bg-[#c5834e]/15 text-[#c5834e]"
+                      }`}
+                    >
+                      {orders.length}
+                    </span>
+                  </motion.button>
+                )}
 
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    soundFx.playClick();
-                    setActiveTab("inventory");
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    activeTab === "inventory"
-                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  <i className="fa-solid fa-boxes-stacked text-xs"></i>
-                  <span>المخزن</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                {canAccessInventory && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("inventory");
+                    }}
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                       activeTab === "inventory"
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
+                        ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                     }`}
                   >
-                    {Object.keys(products).length}
-                  </span>
-                </motion.button>
+                    <i className="fa-solid fa-boxes-stacked text-xs"></i>
+                    <span>المخزن</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        activeTab === "inventory"
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
+                      }`}
+                    >
+                      {Object.keys(products).length}
+                    </span>
+                  </motion.button>
+                )}
 
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    soundFx.playClick();
-                    setActiveTab("dashboard");
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    activeTab === "dashboard"
-                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  <i className="fa-solid fa-chart-pie text-xs"></i>
-                  <span>التقارير</span>
-                </motion.button>
+                {canAccessDashboard && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("dashboard");
+                    }}
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      activeTab === "dashboard"
+                        ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <i className="fa-solid fa-chart-pie text-xs"></i>
+                    <span>التقارير</span>
+                  </motion.button>
+                )}
 
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    soundFx.playClick();
-                    setActiveTab("debts");
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    activeTab === "debts"
-                      ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  <i className="fa-solid fa-hand-holding-dollar text-xs"></i>
-                  <span>الديون</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                {canAccessDebts && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("debts");
+                    }}
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                       activeTab === "debts"
-                        ? "bg-white/20 text-white"
-                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                     }`}
                   >
-                    {debts.length}
-                  </span>
-                </motion.button>
+                    <i className="fa-solid fa-hand-holding-dollar text-xs"></i>
+                    <span>الديون</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        activeTab === "debts"
+                          ? "bg-white/20 text-white"
+                          : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      }`}
+                    >
+                      {debts.length}
+                    </span>
+                  </motion.button>
+                )}
+
+                {canAccessUsers && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setActiveTab("users_management");
+                    }}
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      activeTab === "users_management"
+                        ? "bg-gradient-to-r from-[#c5834e] to-[#a6632f] text-white shadow-md shadow-[#c5834e]/25 scale-[1.02]"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <i className="fa-solid fa-users-gear text-xs"></i>
+                    <span>الموظفين</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        activeTab === "users_management"
+                          ? "bg-white/20 text-white"
+                          : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      }`}
+                    >
+                      {users.length}
+                    </span>
+                  </motion.button>
+                )}
               </div>
             </nav>
 
@@ -1323,16 +1558,17 @@ export default function App() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.15, ease: "easeOut" }}
                 >
-                  {activeTab === "pos" && (
+                  {activeTab === "pos" && canAccessPos && (
                     <PosCashier
                       products={products}
                       onOrderCreated={handleOrderCreated}
                       showToast={showToast}
                       onOpenPrintModal={(order) => setPrintOrder(order)}
+                      cashierName={currentUser?.userTitle || (isOwnerAdmin ? "المدير العام" : "كاشير")}
                     />
                   )}
 
-                  {activeTab === "orders" && (
+                  {activeTab === "orders" && canAccessOrders && (
                     <OrdersList
                       orders={orders}
                       onUpdateStatus={handleUpdateOrderStatus}
@@ -1341,7 +1577,7 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === "inventory" && (
+                  {activeTab === "inventory" && canAccessInventory && (
                     <InventoryManager
                       products={products}
                       onAddProduct={handleAddProduct}
@@ -1354,7 +1590,7 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === "dashboard" && (
+                  {activeTab === "dashboard" && canAccessDashboard && (
                     <DashboardReports
                       orders={orders}
                       shopName={shopName || "RTG-GEARX"}
@@ -1362,7 +1598,7 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === "debts" && (
+                  {activeTab === "debts" && canAccessDebts && (
                     <DebtsTracker
                       debts={debts}
                       onAddOrUpdateDebt={handleAddOrUpdateDebt}
@@ -1372,12 +1608,37 @@ export default function App() {
                       shopName={shopName || "RTG-SESTEM"}
                     />
                   )}
+
+                  {activeTab === "users_management" && canAccessUsers && (
+                    <UsersManagement
+                      users={users}
+                      apiUrl={apiUrl}
+                      cloudUrl={apiUrl}
+                      shopName={shopName || "متجر RTG"}
+                      storeUsername={currentUser?.username || "RTG-USER"}
+                      storeUnifiedUsername={currentUser?.username || "RTG-USER"}
+                      onUpdateUsers={(updatedUsers) => {
+                        setUsers(updatedUsers);
+                        try {
+                          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+                        } catch {}
+                      }}
+                      onUsersUpdated={(updatedUsers) => {
+                        setUsers(updatedUsers);
+                        try {
+                          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+                        } catch {}
+                      }}
+                      showToast={showToast}
+                    />
+                  )}
                 </motion.div>
               </AnimatePresence>
             </main>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Modals */}
       <LoginModal
