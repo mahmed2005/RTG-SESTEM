@@ -67,6 +67,135 @@ function generateOrdersReportText(
   return text;
 }
 
+function buildOrdersReportHtml(
+  filteredOrders: Order[],
+  shopName: string,
+  userTitle?: string
+): string {
+  const todayDate = new Date().toLocaleDateString("ar-LY", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  let totalAmount = 0;
+  let totalProfits = 0;
+  let returnsCount = 0;
+
+  const rowsHtml = filteredOrders
+    .map((o) => {
+      const isRet =
+        o.status === "مرتجع" ||
+        o.status === "راجع" ||
+        (o.status || "").includes("رجع") ||
+        (Number(o.profit) === 0 && Boolean(o.returnNote));
+      const profitVal = isRet ? 0 : Number(o.profit) || 0;
+      const totalVal = Number(o.total) || 0;
+      if (isRet) {
+        returnsCount++;
+      } else {
+        totalAmount += totalVal;
+        totalProfits += profitVal;
+      }
+
+      return `
+        <tr style="border-bottom: 1px solid #e2e8f0; ${isRet ? 'background: #fff1f2;' : ''}">
+          <td style="padding: 7px 10px; font-family: monospace; font-weight: bold; color: #a6632f;">${o.id}</td>
+          <td style="padding: 7px 10px; font-size: 11px;">${o.date}</td>
+          <td style="padding: 7px 10px; font-weight: bold;">${o.cName || "زبون نقدي"}</td>
+          <td style="padding: 7px 10px; font-family: monospace;">${o.cPhone || "-"}</td>
+          <td style="padding: 7px 10px;">${o.method}</td>
+          <td style="padding: 7px 10px; text-align: left; font-family: monospace; font-weight: bold;">${totalVal.toFixed(2)} د.ل</td>
+          <td style="padding: 7px 10px; text-align: left; font-family: monospace; color: ${isRet ? '#dc2626' : '#16a34a'}; font-weight: bold;">
+            ${profitVal.toFixed(2)} د.ل
+          </td>
+          <td style="padding: 7px 10px; text-align: center;">
+            <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background: ${isRet ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
+              ${isRet ? 'مرتجع للمخزن' : o.status || 'مكتملة'}
+            </span>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+      <meta charset="UTF-8">
+      <title>كشف فواتير المبيعات - ${shopName}</title>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;900&family=Tajawal:wght@400;500;700;800&display=swap">
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', 'Tajawal', sans-serif; }
+        body { background: #fff; color: #0f172a; padding: 20px; font-size: 12px; }
+        @page { size: A4 landscape; margin: 10mm; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+        .summary { display: flex; gap: 12px; margin-bottom: 16px; }
+        .stat { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc; text-align: right; flex: 1; }
+        .stat-title { font-size: 10px; color: #64748b; font-weight: bold; }
+        .stat-val { font-size: 16px; font-weight: 900; font-family: monospace; color: #0f172a; }
+        table { width: 100%; border-collapse: collapse; text-align: right; }
+        th { background: #f1f5f9; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; font-weight: 900; font-size: 11px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <h2 style="font-size: 18px; font-weight: 900;">${shopName} — كشف فواتير المبيعات</h2>
+          <p style="color: #a6632f; font-weight: bold; font-size: 11px;">
+            ${userTitle ? `إعداد المشرف: ${userTitle}` : "منظومة إدارة المبيعات والمخازن"}
+          </p>
+        </div>
+        <div style="text-align: left; font-size: 11px; color: #64748b;">
+          تاريخ التصدير: ${todayDate}<br>
+          عدد الفواتير المعروضة: ${filteredOrders.length}
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="stat">
+          <div class="stat-title">إجمالي المبيعات المؤكدة</div>
+          <div class="stat-val">${totalAmount.toFixed(2)} د.ل</div>
+        </div>
+        <div class="stat" style="background: #ecfdf5; border-color: #a7f3d0;">
+          <div class="stat-title" style="color: #065f46;">صافي الأرباح الحقيقي</div>
+          <div class="stat-val" style="color: #047857;">${totalProfits.toFixed(2)} د.ل</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">عدد الفواتير</div>
+          <div class="stat-val">${filteredOrders.length}</div>
+        </div>
+        <div class="stat" style="background: #fff1f2; border-color: #fecdd3;">
+          <div class="stat-title" style="color: #9f1239;">الفواتير المرتجعة</div>
+          <div class="stat-val" style="color: #be123c;">${returnsCount} (أرباحها: 0 د.ل)</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>رقم الفاتورة</th>
+            <th>التاريخ</th>
+            <th>الزبون</th>
+            <th>الهاتف</th>
+            <th>طريقة الدفع</th>
+            <th style="text-align: left;">المبلغ الإجمالي</th>
+            <th style="text-align: left;">صافي الربح</th>
+            <th style="text-align: center;">الحالة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `;
+}
+
 // Helper to convert Arabic-Indic numerals (٠-٩) to Western (0-9)
 function toStandardDigits(str: string): string {
   if (!str) return "";
@@ -172,22 +301,65 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   onUpdateStatus,
   onTriggerReturn,
   onOpenPrintModal,
+  currentUser,
+  shopName = "RTG-SYSTEM",
 }) => {
+  const isEmployee = currentUser?.role === "employee";
+
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
+  // Date filter: only for admin historical browsing
   const [dateFilter, setDateFilter] = useState("");
+  const [cashierFilter, setCashierFilter] = useState("");
+  const [selectedOrderToShare, setSelectedOrderToShare] = useState<Order | null>(null);
+  const [isReportShareOpen, setIsReportShareOpen] = useState(false);
+
+  // User Scope Isolation:
+  // For Employee (Cashier):
+  // 1. Strictly today's orders only (isTodayOrder(o.date) === true)
+  // 2. Belongs to this cashier (never owner/admin orders)
+  // Old orders are completely inaccessible and filtered out for employees.
+  // For Admin / Owner: All orders accessible (today and historical).
+  const userScopedOrders = useMemo(() => {
+    if (!isEmployee) return orders;
+    return orders.filter((o) => {
+      // 1. Strictly today's orders only
+      if (!isTodayOrder(o.date)) return false;
+      // 2. Belongs to this cashier
+      return isOrderBelongsToUser(o, currentUser?.userTitle, currentUser?.username, "employee");
+    });
+  }, [orders, isEmployee, currentUser]);
+
+  // Extract unique cashiers for filter (for store admin)
+  const availableCashiers = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach((o) => {
+      if (o.cashierName && o.cashierName.trim()) {
+        set.add(o.cashierName.trim());
+      }
+    });
+    return Array.from(set);
+  }, [orders]);
 
   // Sort orders newest-first strictly across all states and categories
   const sortedOrders = useMemo(() => {
-    return [...orders].sort((a, b) => {
+    return [...userScopedOrders].sort((a, b) => {
       const tA = parseOrderTimestamp(a);
       const tB = parseOrderTimestamp(b);
       if (tA !== tB) return tB - tA;
 
       return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
     });
-  }, [orders]);
+  }, [userScopedOrders]);
 
   const filteredOrders = sortedOrders.filter((o) => {
     const q = search.toLowerCase().trim();
@@ -210,6 +382,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     if (methodFilter && o.method !== methodFilter && !o.method.includes(methodFilter)) return false;
     if (dateFilter) {
       if (!matchesDateFilter(o.date, dateFilter)) return false;
+    }
+    if (!isEmployee && cashierFilter) {
+      if ((o.cashierName || "").trim() !== cashierFilter.trim()) return false;
     }
     return true;
   });
@@ -255,129 +430,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     soundFx.playSuccess();
     if (filteredOrders.length === 0) return;
 
-    const todayDate = new Date().toLocaleDateString("ar-LY", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    let totalAmount = 0;
-    let totalProfits = 0;
-    let returnsCount = 0;
-
-    const rowsHtml = filteredOrders
-      .map((o) => {
-        const isRet =
-          o.status === "مرتجع" ||
-          o.status === "راجع" ||
-          (o.status || "").includes("رجع") ||
-          (Number(o.profit) === 0 && Boolean(o.returnNote));
-        const profitVal = isRet ? 0 : Number(o.profit) || 0;
-        const totalVal = Number(o.total) || 0;
-        if (isRet) {
-          returnsCount++;
-        } else {
-          totalAmount += totalVal;
-          totalProfits += profitVal;
-        }
-
-        return `
-          <tr style="border-bottom: 1px solid #e2e8f0; ${isRet ? 'background: #fff1f2;' : ''}">
-            <td style="padding: 7px 10px; font-family: monospace; font-weight: bold; color: #a6632f;">${o.id}</td>
-            <td style="padding: 7px 10px; font-size: 11px;">${o.date}</td>
-            <td style="padding: 7px 10px; font-weight: bold;">${o.cName || "زبون نقدي"}</td>
-            <td style="padding: 7px 10px; font-family: monospace;">${o.cPhone || "-"}</td>
-            <td style="padding: 7px 10px;">${o.method}</td>
-            <td style="padding: 7px 10px; text-align: left; font-family: monospace; font-weight: bold;">${totalVal.toFixed(2)} د.ل</td>
-            <td style="padding: 7px 10px; text-align: left; font-family: monospace; color: ${isRet ? '#dc2626' : '#16a34a'}; font-weight: bold;">
-              ${profitVal.toFixed(2)} د.ل
-            </td>
-            <td style="padding: 7px 10px; text-align: center;">
-              <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background: ${isRet ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
-                ${isRet ? 'مرتجع للمخزن (ربح: 0 د.ل)' : o.status || 'مكتملة'}
-              </span>
-            </td>
-          </tr>
-        `;
-      })
-      .join("");
-
-    const html = `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <title>كشف فواتير المبيعات - RTG-SYSTEM</title>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;900&family=Tajawal:wght@400;500;700;800&display=swap">
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', 'Tajawal', sans-serif; }
-          body { background: #fff; color: #0f172a; padding: 20px; font-size: 12px; }
-          @page { size: A4 landscape; margin: 10mm; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
-          .summary { display: flex; gap: 12px; margin-bottom: 16px; }
-          .stat { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc; text-align: right; flex: 1; }
-          .stat-title { font-size: 10px; color: #64748b; font-weight: bold; }
-          .stat-val { font-size: 16px; font-weight: 900; font-family: monospace; color: #0f172a; }
-          table { width: 100%; border-collapse: collapse; text-align: right; }
-          th { background: #f1f5f9; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; font-weight: 900; font-size: 11px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <h2 style="font-size: 18px; font-weight: 900;">RTG-SYSTEM — كشف فواتير المبيعات</h2>
-            <p style="color: #a6632f; font-weight: bold; font-size: 11px;">منظومة إدارة المبيعات والمخازن</p>
-          </div>
-          <div style="text-align: left; font-size: 11px; color: #64748b;">
-            تاريخ الطباعة: ${todayDate}<br>
-            عدد الفواتير المعروضة: ${filteredOrders.length}
-          </div>
-        </div>
-
-        <div class="summary">
-          <div class="stat">
-            <div class="stat-title">إجمالي المبيعات المؤكدة</div>
-            <div class="stat-val">${totalAmount.toFixed(2)} د.ل</div>
-          </div>
-          <div class="stat" style="background: #ecfdf5; border-color: #a7f3d0;">
-            <div class="stat-title" style="color: #065f46;">صافي الأرباح الحقيقي</div>
-            <div class="stat-val" style="color: #047857;">${totalProfits.toFixed(2)} د.ل</div>
-          </div>
-          <div class="stat">
-            <div class="stat-title">عدد الفواتير</div>
-            <div class="stat-val">${filteredOrders.length}</div>
-          </div>
-          <div class="stat" style="background: #fff1f2; border-color: #fecdd3;">
-            <div class="stat-title" style="color: #9f1239;">الفواتير المرتجعة</div>
-            <div class="stat-val" style="color: #be123c;">${returnsCount} (أرباحها: 0 د.ل)</div>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>رقم الفاتورة</th>
-              <th>التاريخ</th>
-              <th>الزبون</th>
-              <th>الهاتف</th>
-              <th>طريقة الدفع</th>
-              <th style="text-align: left;">المبلغ الإجمالي</th>
-              <th style="text-align: left;">صافي الربح</th>
-              <th style="text-align: center;">الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
+    const html = buildOrdersReportHtml(filteredOrders, shopName, currentUser?.userTitle);
     printService.showDocument({
-      title: "كشف فواتير المبيعات - RTG-SYSTEM",
+      title: `كشف فواتير المبيعات - ${shopName}`,
       html,
     });
   };
@@ -419,6 +474,18 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                soundFx.playClick();
+                setIsReportShareOpen(true);
+              }}
+              className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-md shadow-emerald-600/20"
+              title="مشاركة تقرير الفواتير المعروضة عبر واتساب وتطبيقات التواصل"
+            >
+              <i className="fa-solid fa-share-nodes text-xs"></i> مشاركة التقرير
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={exportCSV}
               className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-[#c5834e] dark:text-[#e0a36e] bg-[#c5834e]/10 border border-[#c5834e]/30 hover:bg-[#c5834e]/20 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
             >
@@ -427,7 +494,22 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {/* Employee Scoped Invoices Info Banner */}
+        {isEmployee && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            <span className="flex items-center gap-1.5 font-bold">
+              <i className="fa-solid fa-user-clock text-amber-500"></i>
+              <span>
+                أنت مسجل بحساب الكاشير: <strong>{currentUser?.userTitle || currentUser?.username}</strong> — تظهر فواتيرك الصادرة اليوم فقط ({userScopedOrders.length} فاتورة).
+              </span>
+            </span>
+            <span className="text-[11px] text-amber-600 dark:text-amber-300 font-medium">
+              الفواتير السابقة مؤرشفة تحت صلاحية المالك فقط 🔒
+            </span>
+          </div>
+        )}
+
+        <div className={`grid grid-cols-1 ${!isEmployee ? "sm:grid-cols-4" : "sm:grid-cols-2"} gap-2`}>
           <select
             value={statusFilter}
             onChange={(e) => {
@@ -459,31 +541,52 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             <option value="حوالة">حوالة مصرفية</option>
           </select>
 
-          <div className="relative flex items-center">
-            <input
-              type="date"
-              value={dateFilter}
-              title="فلترة الفواتير بالتاريخ (يوم/شهر/سنة)"
+          {/* Cashier Filter for Store Admin */}
+          {!isEmployee && (
+            <select
+              value={cashierFilter}
               onChange={(e) => {
                 soundFx.playClick();
-                setDateFilter(e.target.value);
+                setCashierFilter(e.target.value);
               }}
-              className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none focus:border-[#c5834e] cursor-pointer"
-            />
-            {dateFilter && (
-              <button
-                type="button"
-                onClick={() => {
+              className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none focus:border-[#c5834e]"
+            >
+              <option value="">جميع البائعين / الكاشيرات</option>
+              {availableCashiers.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {!isEmployee && (
+            <div className="relative flex items-center">
+              <input
+                type="date"
+                value={dateFilter}
+                title="فلترة الفواتير بالتاريخ (يوم/شهر/سنة)"
+                onChange={(e) => {
                   soundFx.playClick();
-                  setDateFilter("");
+                  setDateFilter(e.target.value);
                 }}
-                title="مسح فلتر التاريخ وإظهار الكل"
-                className="mr-1.5 px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-bold rounded-lg border border-rose-500/30 transition-all cursor-pointer flex items-center gap-1"
-              >
-                <i className="fa-solid fa-xmark"></i> مسح
-              </button>
-            )}
-          </div>
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none focus:border-[#c5834e] cursor-pointer"
+              />
+              {dateFilter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setDateFilter("");
+                  }}
+                  title="مسح فلتر التاريخ وإظهار الكل"
+                  className="mr-1.5 px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-bold rounded-lg border border-rose-500/30 transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-xmark"></i> مسح
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -619,6 +722,19 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                             >
                               <i className="fa-solid fa-print"></i>
                             </motion.button>
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                soundFx.playClick();
+                                setSelectedOrderToShare(o);
+                              }}
+                              className="text-[11px] bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              title="مشاركة الفاتورة عبر واتساب وتطبيقات التواصل"
+                            >
+                              <i className="fa-solid fa-share-nodes"></i>
+                              <span className="hidden sm:inline">مشاركة</span>
+                            </motion.button>
                           </div>
                         </td>
                       </tr>
@@ -728,6 +844,17 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                         >
                           <i className="fa-solid fa-print"></i> طباعة
                         </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            soundFx.playClick();
+                            setSelectedOrderToShare(o);
+                          }}
+                          className="text-[10px] bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1"
+                          title="مشاركة الفاتورة"
+                        >
+                          <i className="fa-solid fa-share-nodes"></i> مشاركة
+                        </motion.button>
                       </div>
                     </div>
                   </motion.div>
@@ -737,6 +864,39 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           </>
         )}
       </div>
+
+      {/* Share Modal Dialog for Individual Order */}
+      {selectedOrderToShare && (
+        <ShareModal
+          isOpen={Boolean(selectedOrderToShare)}
+          onClose={() => setSelectedOrderToShare(null)}
+          title={`فاتورة #${selectedOrderToShare.id}`}
+          subtitle={`المبلغ: ${selectedOrderToShare.total.toFixed(2)} د.ل • الزبون: ${selectedOrderToShare.cName || "زبون نقدي"}`}
+          order={selectedOrderToShare}
+          fileName={`فاتورة-${selectedOrderToShare.id}`}
+          shopName={shopName}
+          shareText={generateOrderShareText(selectedOrderToShare, shopName)}
+          recipientPhone={
+            selectedOrderToShare.cPhone && selectedOrderToShare.cPhone !== "غير محدد"
+              ? selectedOrderToShare.cPhone
+              : undefined
+          }
+        />
+      )}
+
+      {/* Share Modal Dialog for Invoices Report */}
+      {isReportShareOpen && (
+        <ShareModal
+          isOpen={isReportShareOpen}
+          onClose={() => setIsReportShareOpen(false)}
+          title={`تقرير فواتير المبيعات (${filteredOrders.length} فاتورة)`}
+          subtitle={`المتجر: ${shopName} • التاريخ: ${new Date().toLocaleDateString("ar-LY")}`}
+          htmlContent={buildOrdersReportHtml(filteredOrders, shopName, currentUser?.userTitle)}
+          fileName={`تقرير-فواتير-${todayStr}`}
+          shopName={shopName}
+          shareText={generateOrdersReportText(filteredOrders, shopName, currentUser?.userTitle)}
+        />
+      )}
     </div>
   );
 };

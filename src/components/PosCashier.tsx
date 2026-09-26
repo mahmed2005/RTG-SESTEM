@@ -43,14 +43,34 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
   const isEmployee = currentUser?.role === "employee";
 
-  // Filter orders for TODAY ONLY and belongs to this cashier/session
+  // Determine effective cashier name clearly (e.g. "محمد (المالك)" or employee name)
+  const effectiveCashierName = useMemo(() => {
+    if (currentUser?.role === "admin") {
+      const name = currentUser.username || "محمد";
+      return currentUser.userTitle && !currentUser.userTitle.includes("المدير العام")
+        ? currentUser.userTitle
+        : `${name} (المالك)`;
+    }
+    if (currentUser?.role === "employee") {
+      return currentUser.userTitle || currentUser.username || "كاشير";
+    }
+    return cashierName || (shopName ? `${shopName} (المالك)` : "محمد (المالك)");
+  }, [currentUser, cashierName, shopName]);
+
+  // Filter orders for TODAY ONLY and strictly belongs to this cashier/session
   const todayMyOrders = useMemo(() => {
     if (!orders || orders.length === 0) return [];
     return orders.filter((o) => {
+      // 1. MUST strictly be today's calendar date
       if (!isTodayOrder(o.date)) return false;
+
+      // 2. If employee (cashier with password 2222):
+      // STRICTLY only include their own orders; EXCLUDE owner/admin orders ("محمد (المالك)") and other cashiers
       if (isEmployee) {
-        return isOrderBelongsToUser(o, currentUser?.userTitle, currentUser?.username);
+        return isOrderBelongsToUser(o, currentUser?.userTitle, currentUser?.username, "employee");
       }
+
+      // If owner/admin, include all today's orders
       return true;
     });
   }, [orders, isEmployee, currentUser]);
@@ -202,7 +222,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       cBackup: enableCustomerData ? customerBackupPhone.trim() : "",
       cArea: enableCustomerData && customerArea.trim() ? customerArea.trim() : defaultArea,
       cartItems: [...cart],
-      cashierName: cashierName || "المدير العام",
+      cashierName: effectiveCashierName,
     };
 
     onOrderCreated(newOrder, updatedProducts);
@@ -229,7 +249,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-800 dark:text-white">
-                {cashierName || "كاشير البيع"}
+                {effectiveCashierName}
               </span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 font-bold">
                 وردية نشطة (اليوم)
@@ -776,8 +796,11 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         <ShareModal
           isOpen={Boolean(selectedOrderToShare)}
           onClose={() => setSelectedOrderToShare(null)}
-          title={`مشاركة فاتورة #${selectedOrderToShare.id}`}
+          title={`فاتورة #${selectedOrderToShare.id}`}
           subtitle={`المبلغ: ${selectedOrderToShare.total.toFixed(2)} د.ل • الزبون: ${selectedOrderToShare.cName || "زبون نقدي"}`}
+          order={selectedOrderToShare}
+          fileName={`فاتورة-${selectedOrderToShare.id}`}
+          shopName={shopName}
           shareText={generateOrderShareText(selectedOrderToShare, shopName)}
           recipientPhone={
             selectedOrderToShare.cPhone && selectedOrderToShare.cPhone !== "غير محدد"

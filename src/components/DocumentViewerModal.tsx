@@ -1,14 +1,23 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { printService, PrintableDocument } from "../services/printHelper";
 import { soundFx } from "../services/soundEffects";
 import { motion, AnimatePresence } from "motion/react";
 import { ShareModal } from "./ShareModal";
-import { generateDocumentShareText } from "../services/shareHelper";
+import {
+  htmlElementToImageBlob,
+  htmlElementToPdfBlob,
+  shareFileOrDownload,
+} from "../services/shareHelper";
 
 export const DocumentViewerModal: React.FC = () => {
   const [doc, setDoc] = useState<PrintableDocument | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isSharingImage, setIsSharingImage] = useState(false);
+  const [isSharingPdf, setIsSharingPdf] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  const documentContentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     return printService.subscribe((currentDoc) => {
@@ -17,6 +26,11 @@ export const DocumentViewerModal: React.FC = () => {
   }, []);
 
   if (!doc) return null;
+
+  const showNotification = (msg: string) => {
+    setFeedbackToast(msg);
+    setTimeout(() => setFeedbackToast(null), 4000);
+  };
 
   const handlePrint = () => {
     soundFx.playSuccess();
@@ -30,14 +44,9 @@ export const DocumentViewerModal: React.FC = () => {
     printService.openInNewTab();
   };
 
-  const handleDownload = () => {
+  const handleDownloadHtml = () => {
     soundFx.playClick();
     printService.downloadHtmlFile();
-  };
-
-  const handleOpenShare = () => {
-    soundFx.playClick();
-    setIsShareOpen(true);
   };
 
   const handleClose = () => {
@@ -45,7 +54,73 @@ export const DocumentViewerModal: React.FC = () => {
     printService.closeDocument();
   };
 
-  const shareText = generateDocumentShareText(doc.title, doc.html);
+  // Direct 1-Click Share as Image (PNG)
+  const handleDirectShareImage = async () => {
+    if (!documentContentRef.current) return;
+    try {
+      soundFx.playClick();
+      setIsSharingImage(true);
+      showNotification("جاري تحويل التقرير إلى صورة عالية الدقة...");
+
+      const blob = await htmlElementToImageBlob(documentContentRef.current);
+      const safeName = (doc.title || "تقرير-مبيعات")
+        .replace(/[^\w\u0600-\u06FF-]/g, "_")
+        .trim();
+      const res = await shareFileOrDownload(
+        blob,
+        `${safeName}.png`,
+        "image/png",
+        doc.title,
+        `صورة ${doc.title} - RTG-SYSTEM`
+      );
+
+      soundFx.playSuccess();
+      if (res.sharedViaNative) {
+        showNotification("✓ تم فتح نافذة المشاركة كصورة");
+      } else if (res.downloaded) {
+        showNotification("✓ تم حفظ الصورة بجهازك! يمكنك إرسالها الآن للمستلم");
+      }
+    } catch (err) {
+      console.error("Direct image share error:", err);
+      showNotification("تعذر إنشاء الصورة، يرجى استخدام زر المشاركة العادي");
+    } finally {
+      setIsSharingImage(false);
+    }
+  };
+
+  // Direct 1-Click Share as PDF
+  const handleDirectSharePdf = async () => {
+    if (!documentContentRef.current) return;
+    try {
+      soundFx.playClick();
+      setIsSharingPdf(true);
+      showNotification("جاري تجهيز وتصدير ملف الـ PDF...");
+
+      const blob = await htmlElementToPdfBlob(documentContentRef.current, doc.title);
+      const safeName = (doc.title || "تقرير-مبيعات")
+        .replace(/[^\w\u0600-\u06FF-]/g, "_")
+        .trim();
+      const res = await shareFileOrDownload(
+        blob,
+        `${safeName}.pdf`,
+        "application/pdf",
+        doc.title,
+        `ملف PDF: ${doc.title} - RTG-SYSTEM`
+      );
+
+      soundFx.playSuccess();
+      if (res.sharedViaNative) {
+        showNotification("✓ تم فتح قائمة المشاركة كملف PDF");
+      } else if (res.downloaded) {
+        showNotification("✓ تم تنزيل ملف الـ PDF بنجاح! يمكنك إرساله للمستلم");
+      }
+    } catch (err) {
+      console.error("Direct PDF share error:", err);
+      showNotification("تعذر إنشاء ملف الـ PDF، يرجى المحاولة مرة أخرى");
+    } finally {
+      setIsSharingPdf(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -54,11 +129,11 @@ export const DocumentViewerModal: React.FC = () => {
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-2xl sm:rounded-3xl w-full max-w-4xl h-[94vh] flex flex-col shadow-2xl overflow-hidden"
+          className="bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-2xl sm:rounded-3xl w-full max-w-5xl h-[94vh] flex flex-col shadow-2xl overflow-hidden"
           dir="rtl"
         >
           {/* Header Bar */}
-          <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-[#2c323f] flex items-center justify-between gap-2 bg-slate-50 dark:bg-[#181c22]">
+          <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-[#2c323f] flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-[#181c22]">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-[#c5834e]/15 border border-[#c5834e]/30 text-[#c5834e] flex items-center justify-center shrink-0">
                 <i className="fa-solid fa-file-invoice text-sm"></i>
@@ -68,58 +143,84 @@ export const DocumentViewerModal: React.FC = () => {
                   {doc.title}
                 </h3>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  جاهز للطباعة والمشاركة كملف PDF على الهاتف والكمبيوتر
+                  جاهز للطباعة والمشاركة الفورية كصورة أو ملف PDF
                 </p>
               </div>
             </div>
 
-            {/* Actions Bar: Print, Share, New Tab, Download, Close */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Actions Bar: Print, Share as Image, Share as PDF, Share Modal, New Tab, Download, Close */}
+            <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+              {/* 1. Native Print / Save PDF */}
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handlePrint}
                 disabled={isPrinting}
-                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-[#c5834e]/20 cursor-pointer"
-                title="طباعة أو حفظ كملف PDF"
+                className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-[#c5834e]/20 cursor-pointer"
+                title="طباعة أو حفظ عبر الطابعة"
               >
                 <i className={`fa-solid ${isPrinting ? "fa-spinner fa-spin" : "fa-print"}`}></i>
-                <span className="hidden sm:inline">طباعة / حفظ PDF</span>
-                <span className="sm:hidden">طباعة</span>
+                <span className="hidden sm:inline">طباعة</span>
               </motion.button>
 
-              {/* Explicit User Request: Share button right in the top bar */}
+              {/* 2. Share as Image (PNG) */}
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={handleOpenShare}
-                className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
-                title="مشاركة الفاتورة أو التقرير عبر واتساب والإنستغرام"
+                onClick={handleDirectShareImage}
+                disabled={isSharingImage || isSharingPdf}
+                className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                title="مشاركة التقرير كصورة (PNG) عبر واتساب والإنستغرام"
               >
-                <i className="fa-solid fa-share-nodes text-xs"></i>
-                <span>مشاركة</span>
+                <i className={`fa-solid ${isSharingImage ? "fa-spinner fa-spin" : "fa-image"} text-xs`}></i>
+                <span>مشاركة كصورة</span>
               </motion.button>
 
+              {/* 3. Share as PDF */}
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleDirectSharePdf}
+                disabled={isSharingImage || isSharingPdf}
+                className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-rose-600/20 disabled:opacity-50"
+                title="مشاركة كملف PDF رسمي جاهز"
+              >
+                <i className={`fa-solid ${isSharingPdf ? "fa-spinner fa-spin" : "fa-file-pdf"} text-xs`}></i>
+                <span>مشاركة PDF</span>
+              </motion.button>
+
+              {/* 4. More Share Options Dialog */}
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(true)}
+                className="px-2.5 py-1.5 sm:py-2 bg-slate-200 dark:bg-[#222731] hover:bg-slate-300 dark:hover:bg-[#2b323f] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                title="خيارات مشاركة إضافية ورقم واتساب"
+              >
+                <i className="fa-solid fa-share-nodes text-xs"></i>
+                <span className="hidden md:inline">خيارات</span>
+              </button>
+
+              {/* 5. Open in new tab */}
               <button
                 type="button"
                 onClick={handleOpenNewTab}
-                className="px-2.5 py-1.5 sm:py-2 bg-slate-200 dark:bg-[#222731] hover:bg-slate-300 dark:hover:bg-[#2b323f] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                className="hidden sm:flex px-2.5 py-1.5 sm:py-2 bg-slate-200 dark:bg-[#222731] hover:bg-slate-300 dark:hover:bg-[#2b323f] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer items-center gap-1"
                 title="فتح في صفحة مستقلة"
               >
                 <i className="fa-solid fa-up-right-from-square"></i>
-                <span className="hidden md:inline">نافذة جديدة</span>
               </button>
 
+              {/* 6. Download HTML */}
               <button
                 type="button"
-                onClick={handleDownload}
-                className="hidden sm:flex px-2.5 py-1.5 sm:py-2 bg-slate-200 dark:bg-[#222731] hover:bg-slate-300 dark:hover:bg-[#2b323f] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer items-center gap-1"
+                onClick={handleDownloadHtml}
+                className="hidden md:flex px-2.5 py-1.5 sm:py-2 bg-slate-200 dark:bg-[#222731] hover:bg-slate-300 dark:hover:bg-[#2b323f] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer items-center gap-1"
                 title="تنزيل كملف HTML"
               >
                 <i className="fa-solid fa-download"></i>
-                <span>تنزيل</span>
               </button>
 
+              {/* 7. Close */}
               <button
                 type="button"
                 onClick={handleClose}
@@ -131,9 +232,25 @@ export const DocumentViewerModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Feedback Toast */}
+          {feedbackToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[#c5834e] text-white text-xs font-bold py-2 px-4 text-center shadow-md flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-circle-check"></i>
+              <span>{feedbackToast}</span>
+            </motion.div>
+          )}
+
           {/* Document Content View */}
-          <div className="flex-1 overflow-auto bg-slate-100 dark:bg-[#0d1015] p-2 sm:p-4 flex justify-center items-start">
-            <div className="w-full max-w-3xl bg-white text-slate-900 rounded-xl shadow-lg border border-slate-200 p-2 sm:p-6 overflow-x-auto">
+          <div className="flex-1 overflow-auto bg-slate-100 dark:bg-[#0d1015] p-2 sm:p-6 flex justify-center items-start">
+            <div
+              ref={documentContentRef}
+              id="active-document-content"
+              className="w-full max-w-3xl bg-white text-slate-900 rounded-2xl shadow-lg border border-slate-200 p-4 sm:p-8 overflow-x-auto"
+            >
               <div
                 className="printable-document"
                 dangerouslySetInnerHTML={{ __html: doc.html }}
@@ -143,13 +260,15 @@ export const DocumentViewerModal: React.FC = () => {
         </motion.div>
       </div>
 
-      {/* Share Modal Dialog */}
+      {/* Share Modal Dialog with Full PDF/Image capability */}
       <ShareModal
-        isOpen={isShareOpen}
-        onClose={() => setIsShareOpen(false)}
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
         title={`مشاركة: ${doc.title}`}
-        shareText={shareText}
-        subtitle="مشاركة التقرير عبر واتساب وتطبيقات التواصل الاجتماعي"
+        targetElementId="active-document-content"
+        htmlContent={doc.html}
+        fileName={doc.title}
+        subtitle="شارك كصورة واضحة أو كملف PDF رسمي عبر واتساب وإنستجرام"
       />
     </AnimatePresence>
   );

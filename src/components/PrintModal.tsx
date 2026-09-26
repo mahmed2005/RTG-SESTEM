@@ -360,7 +360,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
               <div className="flex justify-between">
                 <span className="text-slate-500">البائع / الكاشير:</span>
                 <span className="font-bold text-slate-800 text-[10px]">
-                  {order.cashierName || "المدير العام"}
+                  {order.cashierName || (shopName ? `${shopName} (المالك)` : "محمد (المالك)")}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -461,23 +461,23 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
 
           {/* Action Buttons */}
           <div className="space-y-2 pt-1">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
                 disabled={isPrinting}
                 onClick={handlePrint}
-                className="bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] disabled:opacity-75 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-[#c5834e]/20 transition-all"
+                className="bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] disabled:opacity-75 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer shadow-lg shadow-[#c5834e]/20 transition-all"
               >
                 {isPrinting ? (
                   <>
                     <i className="fa-solid fa-spinner fa-spin"></i>
-                    <span>جاري إرسال الأمر...</span>
+                    <span>جاري...</span>
                   </>
                 ) : (
                   <>
                     <i className="fa-solid fa-print"></i>
-                    <span>طباعة الفاتورة الآن</span>
+                    <span>طباعة</span>
                   </>
                 )}
               </motion.button>
@@ -486,7 +486,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={handleExportPDF}
-                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer transition-all"
               >
                 <i className="fa-solid fa-file-pdf"></i>
                 <span>حفظ PDF</span>
@@ -499,11 +499,11 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
                   soundFx.playClick();
                   setIsShareOpen(true);
                 }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-md shadow-emerald-600/20"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer transition-all shadow-md shadow-emerald-600/20"
                 title="مشاركة الفاتورة عبر واتساب وتطبيقات التواصل"
               >
                 <i className="fa-solid fa-share-nodes"></i>
-                <span>مشاركة الفاتورة</span>
+                <span>مشاركة</span>
               </motion.button>
             </div>
 
@@ -538,8 +538,12 @@ export const PrintModal: React.FC<PrintModalProps> = ({ order, shopName, onClose
       <ShareModal
         isOpen={isShareOpen}
         onClose={() => setIsShareOpen(false)}
-        title={`مشاركة فاتورة #${order.id}`}
+        title={`فاتورة #${order.id}`}
         subtitle={`مبلغ الفاتورة: ${order.total.toFixed(2)} د.ل • الزبون: ${order.cName || "زبون نقدي"}`}
+        order={order}
+        targetElementId="printable-receipt"
+        fileName={`فاتورة-${order.id}`}
+        shopName={shopName}
         shareText={generateOrderShareText(order, shopName)}
         recipientPhone={order.cPhone && order.cPhone !== "غير محدد" ? order.cPhone : undefined}
       />

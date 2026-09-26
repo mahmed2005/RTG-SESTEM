@@ -393,7 +393,15 @@ export default function App() {
   const handleSplashComplete = () => {
     const savedKey = localStorage.getItem(STORAGE_KEYS.LICENSE_KEY);
     if (savedKey) {
-      if (!currentUser) {
+      const savedSessionRaw = localStorage.getItem(STORAGE_KEYS.SESSION);
+      if (savedSessionRaw) {
+        try {
+          const parsed = JSON.parse(savedSessionRaw);
+          if (parsed && parsed.role) {
+            setCurrentUser(parsed);
+          }
+        } catch {}
+      } else if (!currentUser) {
         const savedShop = localStorage.getItem(STORAGE_KEYS.SHOP_NAME) || "RTG-SYSTEM";
         setCurrentUser({
           role: "admin",
@@ -446,14 +454,29 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.SHOP_NAME, finalShopName);
 
     // Set User Session
-    const activeSession: UserSession = userSession || {
-      role: "admin",
-      userTitle: "المالك / المدير العام",
-      username: subscriber?.username || storeUsernameOrEmail || licenseKey,
-      permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
-      loginAt: new Date().toISOString(),
-    };
+    const activeSession: UserSession = userSession
+      ? {
+          ...userSession,
+          userTitle:
+            userSession.role === "admin" && !userSession.userTitle?.includes("المالك")
+              ? `${userSession.username || "محمد"} (المالك)`
+              : userSession.userTitle,
+        }
+      : {
+          role: "admin",
+          userTitle: subscriber?.username
+            ? `${subscriber.username} (المالك)`
+            : storeUsernameOrEmail
+            ? `${storeUsernameOrEmail} (المالك)`
+            : "محمد (المالك)",
+          username: subscriber?.username || storeUsernameOrEmail || licenseKey,
+          permissions: ["pos", "orders", "inventory", "dashboard", "debts"],
+          loginAt: new Date().toISOString(),
+        };
     setCurrentUser(activeSession);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(activeSession));
+    } catch {}
 
     // Determine initial active tab based on user's permissions
     if (activeSession.role === "employee") {
@@ -657,9 +680,31 @@ export default function App() {
           }
           if (cloudData.orders && cloudData.orders.length > 0) {
             setOrders((prev) => {
+              const prevMap = new Map<string, Order>(prev.map((o: Order) => [o.id, o]));
+              const merged = (cloudData.orders as Order[]).map((cloudOrder: Order) => {
+                const existing = prevMap.get(cloudOrder.id);
+                if (existing) {
+                  return {
+                    ...existing,
+                    ...cloudOrder,
+                    // Preserve cashierName if cloud returned empty or whitespace
+                    cashierName:
+                      cloudOrder.cashierName && cloudOrder.cashierName.trim()
+                        ? cloudOrder.cashierName.trim()
+                        : existing.cashierName || "",
+                  };
+                }
+                return cloudOrder;
+              });
+
+              // Keep any local orders just created that haven't synced to cloud yet
+              const cloudIds = new Set((cloudData.orders as Order[]).map((o: Order) => o.id));
+              const missingLocals = prev.filter((o) => !cloudIds.has(o.id));
+
+              const combined = [...missingLocals, ...merged];
               const prevStr = JSON.stringify(prev);
-              const nextStr = JSON.stringify(cloudData.orders);
-              return prevStr !== nextStr ? cloudData.orders! : prev;
+              const nextStr = JSON.stringify(combined);
+              return prevStr !== nextStr ? combined : prev;
             });
           }
           if (cloudData.debts) {
@@ -1564,7 +1609,16 @@ export default function App() {
                       onOrderCreated={handleOrderCreated}
                       showToast={showToast}
                       onOpenPrintModal={(order) => setPrintOrder(order)}
-                      cashierName={currentUser?.userTitle || (isOwnerAdmin ? "المدير العام" : "كاشير")}
+                      cashierName={
+                        currentUser?.role === "admin"
+                          ? (currentUser.userTitle?.includes("المالك")
+                              ? currentUser.userTitle
+                              : `${currentUser?.username || "محمد"} (المالك)`)
+                          : (currentUser?.userTitle || currentUser?.username || "كاشير")
+                      }
+                      currentUser={currentUser}
+                      orders={orders}
+                      shopName={shopName}
                     />
                   )}
 
@@ -1574,6 +1628,8 @@ export default function App() {
                       onUpdateStatus={handleUpdateOrderStatus}
                       onTriggerReturn={(invoiceId) => setReturnInvoiceId(invoiceId)}
                       onOpenPrintModal={(order) => setPrintOrder(order)}
+                      currentUser={currentUser}
+                      shopName={shopName}
                     />
                   )}
 

@@ -137,7 +137,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           const employeeSession: UserSession = {
             role: "employee",
             userTitle: localEmp.userTitle || "موظف",
-            username: sub.username,
+            username: localEmp.userTitle || localEmp.username || cleanId,
             permissions: localEmp.permissions || ["pos"],
             loginAt: new Date().toISOString(),
           };
@@ -173,7 +173,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           const employeeSession: UserSession = {
             role: "employee",
             userTitle: empRes.user.userTitle || "موظف",
-            username: sub.username,
+            username: empRes.user.userTitle || empRes.user.username || cleanId,
             permissions: empRes.user.permissions || ["pos"],
             loginAt: new Date().toISOString(),
           };
@@ -385,7 +385,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             const employeeSession: UserSession = {
               role: "employee",
               userTitle: response.userTitle || (response.user && response.user.userTitle) || "موظف مبيعات",
-              username,
+              username: response.userTitle || (response.user && response.user.userTitle) || cleanId,
               permissions: perms.length > 0 ? perms : ["pos"],
               loginAt: new Date().toISOString(),
             };
