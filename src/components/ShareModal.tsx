@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { soundFx } from "../services/soundEffects";
 import { Order } from "../types";
 import {
+  generateInvoiceImage,
+  generateInvoicePdf,
   htmlStringToImageBlob,
   htmlStringToPdfBlob,
   htmlElementToImageBlob,
@@ -10,8 +12,11 @@ import {
   shareFileOrDownload,
   shareViaWhatsApp,
   shareViaTelegram,
+  shareViaFacebook,
   generateOrderShareText,
+  downloadBlob,
   copyTextToClipboard,
+  copyImageBlobToClipboard,
 } from "../services/shareHelper";
 
 interface ShareModalProps {
@@ -26,6 +31,7 @@ interface ShareModalProps {
   order?: Order | null;
   fileName?: string;
   shopName?: string;
+  initialTab?: "image" | "pdf" | "whatsapp";
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -40,243 +46,317 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   order,
   fileName,
   shopName = "RTG-SYSTEM",
+  initialTab = "image",
 }) => {
   const [customPhone, setCustomPhone] = useState(recipientPhone || "");
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"image" | "pdf" | "whatsapp">(initialTab);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [cachedImageBlob, setCachedImageBlob] = useState<Blob | null>(null);
+  const [cachedPdfBlob, setCachedPdfBlob] = useState<Blob | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Generate Image and PDF previews in parallel when modal opens
+  useEffect(() => {
+    if (!isOpen) {
+      setPreviewDataUrl(null);
+      setCachedImageBlob(null);
+      setCachedPdfBlob(null);
+      setStatusMessage(null);
+      return;
+    }
+
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+
+    let isMounted = true;
+
+    const preparePreview = async () => {
+      try {
+        if (order) {
+          // Instant pure-canvas invoice generation (<5ms)
+          const { blob, dataUrl } = await generateInvoiceImage(order, shopName);
+          if (isMounted) {
+            setCachedImageBlob(blob);
+            setPreviewDataUrl(dataUrl);
+          }
+
+          // Pre-generate PDF in background
+          generateInvoicePdf(order, shopName)
+            .then((pdfRes) => {
+              if (isMounted) setCachedPdfBlob(pdfRes.blob);
+            })
+            .catch(() => {});
+        } else if (targetElementId) {
+          const el = document.getElementById(targetElementId);
+          if (el) {
+            const blob = await htmlElementToImageBlob(el);
+            const dataUrl = URL.createObjectURL(blob);
+            if (isMounted) {
+              setCachedImageBlob(blob);
+              setPreviewDataUrl(dataUrl);
+            }
+
+            htmlElementToPdfBlob(el, title)
+              .then((pdfBlob) => {
+                if (isMounted) setCachedPdfBlob(pdfBlob);
+              })
+              .catch(() => {});
+          }
+        } else if (htmlContent) {
+          const { blob, dataUrl } = await htmlStringToImageBlob(htmlContent, 720);
+          if (isMounted) {
+            setCachedImageBlob(blob);
+            setPreviewDataUrl(dataUrl);
+          }
+
+          htmlStringToPdfBlob(htmlContent, title)
+            .then((pdfRes) => {
+              if (isMounted) setCachedPdfBlob(pdfRes.blob);
+            })
+            .catch(() => {});
+        }
+      } catch (err) {
+        console.warn("Preview prep error:", err);
+      }
+    };
+
+    preparePreview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, order, targetElementId, htmlContent, shopName, initialTab, title]);
 
   if (!isOpen) return null;
 
-  // Resolve HTML representation if order is provided
-  const resolveHtmlContent = (): string => {
-    if (htmlContent) return htmlContent;
+  const baseFileName =
+    fileName || (order ? `فاتورة-${order.id}` : "تقرير-مبيعات-RTG");
+
+  const effectiveShareText =
+    shareText ||
+    (order ? generateOrderShareText(order, shopName) : `📊 ${title} - ${shopName}`);
+
+  // Helper to get or generate Image Blob
+  const getImageBlob = async (): Promise<Blob> => {
+    if (cachedImageBlob) return cachedImageBlob;
 
     if (order) {
-      const itemsList =
-        order.cartItems && order.cartItems.length > 0
-          ? order.cartItems
-              .map(
-                (item, idx) => `
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                  <td style="padding: 8px 10px; font-weight: bold; color: #1e293b;">${idx + 1}. ${item.name}</td>
-                  <td style="padding: 8px 10px; text-align: center; font-family: monospace;">${item.qty}</td>
-                  <td style="padding: 8px 10px; text-align: left; font-family: monospace;">${item.price.toFixed(2)} د.ل</td>
-                  <td style="padding: 8px 10px; text-align: left; font-family: monospace; font-weight: bold; color: #c5834e;">${(item.qty * item.price).toFixed(2)} د.ل</td>
-                </tr>
-              `
-              )
-              .join("")
-          : `
-              <tr>
-                <td colspan="4" style="padding: 10px; color: #475569;">${order.desc}</td>
-              </tr>
-            `;
-
-      return `
-        <div style="font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; direction: rtl; text-align: right; background: #ffffff; color: #0f172a; padding: 24px; border-radius: 16px; border: 2px solid #e2e8f0; width: 600px; box-sizing: border-box;">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #c5834e; padding-bottom: 14px; margin-bottom: 16px;">
-            <div>
-              <h2 style="margin: 0; font-size: 22px; font-weight: 900; color: #0f172a;">${shopName}</h2>
-              <p style="margin: 3px 0 0 0; color: #c5834e; font-weight: bold; font-size: 13px;">فاتورة مبيعات معتمدة</p>
-            </div>
-            <div style="text-align: left; font-family: monospace;">
-              <span style="display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 8px; font-weight: 900; font-size: 14px;">#${order.id}</span>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${order.date}</div>
-            </div>
-          </div>
-
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; line-height: 1.8;">
-            <div style="display: flex; justify-content: space-between;">
-              <span><strong>العميل:</strong> ${order.cName || "زبون نقدي"}</span>
-              <span><strong>الهاتف:</strong> ${order.cPhone || "-"}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 4px;">
-              <span><strong>طريقة الدفع:</strong> ${order.method || "كاش"}</span>
-              <span><strong>البائع / الكاشير:</strong> ${order.cashierName || "محمد (المالك)"}</span>
-            </div>
-            ${order.cArea ? `<div style="margin-top: 4px;"><strong>العنوان / المنطقة:</strong> ${order.cArea}</div>` : ""}
-          </div>
-
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
-            <thead>
-              <tr style="background: #1e293b; color: #ffffff;">
-                <th style="padding: 8px 10px; text-align: right; border-radius: 0 8px 0 0;">المنتج</th>
-                <th style="padding: 8px 10px; text-align: center;">الكمية</th>
-                <th style="padding: 8px 10px; text-align: left;">السعر</th>
-                <th style="padding: 8px 10px; text-align: left; border-radius: 8px 0 0 0;">الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsList}
-            </tbody>
-          </table>
-
-          <div style="background: #fafaf9; border-top: 2px solid #e7e5e4; padding: 12px 16px; border-radius: 0 0 12px 12px; font-size: 13px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #57534e;">
-              <span>المجموع الفرعي:</span>
-              <span style="font-family: monospace; font-weight: bold;">${(order.total - (order.delivery || 0) + (order.discount || 0)).toFixed(2)} د.ل</span>
-            </div>
-            ${Number(order.delivery || 0) > 0 ? `
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #57534e;">
-                <span>رسوم التوصيل:</span>
-                <span style="font-family: monospace; font-weight: bold;">+${Number(order.delivery).toFixed(2)} د.ل</span>
-              </div>
-            ` : ""}
-            ${Number(order.discount || 0) > 0 ? `
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #dc2626;">
-                <span>قيمة الخصم:</span>
-                <span style="font-family: monospace; font-weight: bold;">-${Number(order.discount).toFixed(2)} د.ل</span>
-              </div>
-            ` : ""}
-            <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed #d6d3d1; font-size: 16px; font-weight: 900; color: #0f172a;">
-              <span>المبلغ الإجمالي المستحق:</span>
-              <span style="color: #c5834e; font-family: monospace;">${order.total.toFixed(2)} د.ل</span>
-            </div>
-          </div>
-
-          <div style="text-align: center; margin-top: 16px; font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 10px;">
-            منظومة RTG-SYSTEM لإدارة المبيعات والمخازن • شكراً لتعاملكم معنا
-          </div>
-        </div>
-      `;
+      const { blob, dataUrl } = await generateInvoiceImage(order, shopName);
+      setCachedImageBlob(blob);
+      setPreviewDataUrl(dataUrl);
+      return blob;
     }
 
-    return "";
-  };
-
-  // Helper to obtain a Blob (as Image or PDF)
-  const getBlob = async (type: "image" | "pdf"): Promise<{ blob: Blob; filename: string }> => {
-    const baseName =
-      fileName || (order ? `فاتورة-${order.id}` : "تقرير-مبيعات-RTG");
-
-    // 1. Try DOM element directly if element ID specified
     if (targetElementId) {
       const el = document.getElementById(targetElementId);
       if (el) {
+        const blob = await htmlElementToImageBlob(el);
+        setCachedImageBlob(blob);
+        return blob;
+      }
+    }
+
+    if (htmlContent) {
+      const { blob, dataUrl } = await htmlStringToImageBlob(htmlContent, 720);
+      setCachedImageBlob(blob);
+      setPreviewDataUrl(dataUrl);
+      return blob;
+    }
+
+    throw new Error("لا يوجد محتوى متاح لإنشاء الصورة");
+  };
+
+  // Helper to get or generate PDF Blob
+  const getPdfBlob = async (): Promise<Blob> => {
+    if (cachedPdfBlob) return cachedPdfBlob;
+
+    if (order) {
+      const { blob } = await generateInvoicePdf(order, shopName);
+      setCachedPdfBlob(blob);
+      return blob;
+    }
+
+    if (targetElementId) {
+      const el = document.getElementById(targetElementId);
+      if (el) {
+        const blob = await htmlElementToPdfBlob(el, title);
+        setCachedPdfBlob(blob);
+        return blob;
+      }
+    }
+
+    if (htmlContent) {
+      const { blob } = await htmlStringToPdfBlob(htmlContent, title);
+      setCachedPdfBlob(blob);
+      return blob;
+    }
+
+    throw new Error("لا يوجد محتوى متاح لإنشاء الـ PDF");
+  };
+
+  // 1. Mobile Native Share Sheet (Triggers phone's system share menu)
+  const handleNativeShare = async (type: "image" | "pdf") => {
+    try {
+      soundFx.playClick();
+      setIsProcessing(true);
+      setStatusMessage("جاري فتح قائمة المشاركة بالهاتف...");
+
+      let blob: Blob;
+      let filename: string;
+      let mimeType: string;
+
+      if (type === "image") {
+        blob = cachedImageBlob || (await getImageBlob());
+        filename = `${baseFileName}.png`;
+        mimeType = "image/png";
+      } else {
+        blob = cachedPdfBlob || (await getPdfBlob());
+        filename = `${baseFileName}.pdf`;
+        mimeType = "application/pdf";
+      }
+
+      const res = await shareFileOrDownload(
+        blob,
+        filename,
+        mimeType,
+        title,
+        effectiveShareText
+      );
+
+      soundFx.playSuccess();
+      if (res.sharedViaNative) {
+        setStatusMessage("✓ تم فتح قائمة المشاركة بالهاتف بنجاح");
+      } else {
         if (type === "image") {
-          const blob = await htmlElementToImageBlob(el);
-          return { blob, filename: `${baseName}.png` };
+          copyImageBlobToClipboard(blob).then((copiedOk) => {
+            if (copiedOk) {
+              setStatusMessage("✓ تم نسخ صورة الفاتورة وحفظها! يمكنك لصقها الآن في واتساب أو أي تطبيق.");
+            } else {
+              setStatusMessage("✓ تم تنزيل الصورة! يمكنك مشاركتها عبر الأزرار أدناه 👇");
+            }
+          });
         } else {
-          const blob = await htmlElementToPdfBlob(el, title);
-          return { blob, filename: `${baseName}.pdf` };
+          setStatusMessage("✓ تم تنزيل ملف الـ PDF بجهازك! يمكنك إرساله للمستلم عبر التطبيقات أدناه 👇");
         }
       }
+    } catch (err) {
+      console.error("Native share error:", err);
+      setStatusMessage("اختر التطبيق المطلوب للمشاركة من الأزرار المباشرة أدناه 👇");
+    } finally {
+      setIsProcessing(false);
     }
+  };
 
-    // 2. Otherwise generate from HTML string
-    const html = resolveHtmlContent();
-    if (html) {
-      if (type === "image") {
-        const blob = await htmlStringToImageBlob(html, 640);
-        return { blob, filename: `${baseName}.png` };
+  // 2. Save Image to Gallery / Device
+  const handleSaveToGallery = async () => {
+    try {
+      soundFx.playSuccess();
+      setIsProcessing(true);
+      const blob = cachedImageBlob || (await getImageBlob());
+      downloadBlob(blob, `${baseFileName}.png`);
+      setStatusMessage("✓ تم حفظ الصورة في المعرض والتنزيلات بنجاح!");
+    } catch {
+      setStatusMessage("فشل حفظ الصورة");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 3. Copy Image Blob to Clipboard for 1-tap pasting into chat
+  const handleCopyImage = async () => {
+    try {
+      soundFx.playClick();
+      setIsProcessing(true);
+      const blob = cachedImageBlob || (await getImageBlob());
+      const success = await copyImageBlobToClipboard(blob);
+      if (success) {
+        soundFx.playSuccess();
+        setStatusMessage("✓ تم نسخ صورة الفاتورة للحافظة! يمكنك الآن لصقها (Paste) في محادثة واتساب أو أي تطبيق.");
       } else {
-        const blob = await htmlStringToPdfBlob(html, title);
-        return { blob, filename: `${baseName}.pdf` };
+        downloadBlob(blob, `${baseFileName}.png`);
+        setStatusMessage("✓ تم حفظ الصورة في التنزيلات والمعرض!");
       }
-    }
-
-    throw new Error("لا يوجد محتوى متاح للتحويل");
-  };
-
-  // 1. Share as high-res Image (PNG)
-  const handleShareAsImage = async () => {
-    try {
-      soundFx.playClick();
-      setIsGeneratingImage(true);
-      setStatusMessage("جاري تجهيز الصورة عالية الدقة...");
-
-      const { blob, filename } = await getBlob("image");
-      const res = await shareFileOrDownload(
-        blob,
-        filename,
-        "image/png",
-        title,
-        `صورة ${title} - ${shopName}`
-      );
-
-      soundFx.playSuccess();
-      if (res.sharedViaNative) {
-        setStatusMessage("✓ تم فتح نافذة المشاركة بنجاح");
-        setTimeout(() => onClose(), 1200);
-      } else if (res.downloaded) {
-        setStatusMessage("✓ تم حفظ الصورة بجهازك! يمكنك إرسالها الآن عبر واتساب أو إنستجرام");
-      }
-    } catch (err) {
-      console.error("Image share error:", err);
-      setStatusMessage("تعذر تحويل الفاتورة لصورة، يرجى المحاولة مرة أخرى");
+    } catch {
+      setStatusMessage("تعذر نسخ الصورة تلقائياً");
     } finally {
-      setIsGeneratingImage(false);
+      setIsProcessing(false);
     }
   };
 
-  // 2. Share as PDF document
-  const handleShareAsPdf = async () => {
+  // 4. Save PDF to Device
+  const handleSavePdf = async () => {
     try {
-      soundFx.playClick();
-      setIsGeneratingPdf(true);
-      setStatusMessage("جاري إنشاء وتصدير ملف الـ PDF...");
-
-      const { blob, filename } = await getBlob("pdf");
-      const res = await shareFileOrDownload(
-        blob,
-        filename,
-        "application/pdf",
-        title,
-        `ملف PDF: ${title} - ${shopName}`
-      );
-
       soundFx.playSuccess();
-      if (res.sharedViaNative) {
-        setStatusMessage("✓ تم فتح قائمة المشاركة كملف PDF بنجاح");
-        setTimeout(() => onClose(), 1200);
-      } else if (res.downloaded) {
-        setStatusMessage("✓ تم تنزيل ملف الـ PDF بنجاح! يمكنك إرساله للمستلم مباشرة");
-      }
-    } catch (err) {
-      console.error("PDF share error:", err);
-      setStatusMessage("تعذر إنشاء ملف الـ PDF، يرجى المحاولة مرة أخرى");
+      setIsProcessing(true);
+      const blob = cachedPdfBlob || (await getPdfBlob());
+      downloadBlob(blob, `${baseFileName}.pdf`);
+      setStatusMessage("✓ تم تنزيل ملف الـ PDF بنجاح!");
+    } catch {
+      setStatusMessage("فشل تنزيل ملف الـ PDF");
     } finally {
-      setIsGeneratingPdf(false);
+      setIsProcessing(false);
     }
   };
 
-  // Direct WhatsApp with Phone
-  const handleDirectWhatsApp = () => {
+  // 5. WhatsApp share (with text and image preparation)
+  const handleWhatsAppShare = async () => {
     soundFx.playSuccess();
-    const text =
-      shareText ||
-      (order ? generateOrderShareText(order, shopName) : `📊 ${title} - ${shopName}`);
-    shareViaWhatsApp(text, customPhone);
+    try {
+      if (cachedImageBlob) {
+        downloadBlob(cachedImageBlob, `${baseFileName}.png`);
+        await copyImageBlobToClipboard(cachedImageBlob).catch(() => {});
+      }
+    } catch {}
+    shareViaWhatsApp(effectiveShareText, customPhone);
+    setStatusMessage("✓ تم فتح واتساب وتجهيز الصورة للمحادثة!");
   };
 
+  // 6. Facebook share
+  const handleFacebookShare = () => {
+    soundFx.playClick();
+    if (cachedImageBlob) {
+      downloadBlob(cachedImageBlob, `${baseFileName}.png`);
+    }
+    shareViaFacebook(effectiveShareText);
+  };
+
+  // 7. Telegram share
+  const handleTelegramShare = () => {
+    soundFx.playClick();
+    if (cachedImageBlob) {
+      downloadBlob(cachedImageBlob, `${baseFileName}.png`);
+    }
+    shareViaTelegram(effectiveShareText);
+  };
+
+  // 8. Copy Text Summary
   const handleCopyText = async () => {
     soundFx.playClick();
-    const text =
-      shareText ||
-      (order ? generateOrderShareText(order, shopName) : `📊 ${title} - ${shopName}`);
-    const ok = await copyTextToClipboard(text);
+    const ok = await copyTextToClipboard(effectiveShareText);
     if (ok) {
       soundFx.playSuccess();
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
+      setStatusMessage("✓ تم نسخ نص الفاتورة للحافظة");
     }
   };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[95] flex items-center justify-center p-3 sm:p-4">
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[95] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, scale: 0.94, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 15 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-3xl p-4 sm:p-6 w-full max-w-lg shadow-2xl text-right space-y-4"
+          className="bg-white dark:bg-[#121418] border border-slate-200 dark:border-[#2c323f] rounded-3xl p-4 sm:p-6 w-full max-w-lg shadow-2xl text-right space-y-4 max-h-[95vh] flex flex-col"
           dir="rtl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#c5834e] to-[#a6632f] text-white flex items-center justify-center text-lg shadow-md shadow-[#c5834e]/20">
                 <i className="fa-solid fa-share-nodes"></i>
@@ -286,7 +366,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   {title}
                 </h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {subtitle || "مشاركة كصورة (PNG) أو كملف PDF رسمي عبر واتساب وإنستجرام"}
+                  {subtitle || "مشاركة كصورة (PNG) أو ملف (PDF) عبر واتساب وتطبيقات الهاتف"}
                 </p>
               </div>
             </div>
@@ -302,123 +382,304 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </button>
           </div>
 
-          {/* Status Message / Notification */}
+          {/* Tab Selector: Image PNG / PDF File / WhatsApp Direct */}
+          <div className="flex p-1 bg-slate-100 dark:bg-[#181c22] rounded-2xl gap-1 shrink-0">
+            <button
+              onClick={() => setActiveTab("image")}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "image"
+                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                  : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+              }`}
+            >
+              <i className="fa-solid fa-image"></i>
+              <span>مشاركة كصورة (PNG)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("pdf")}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "pdf"
+                  ? "bg-[#c5834e] text-white shadow-md shadow-[#c5834e]/20"
+                  : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+              }`}
+            >
+              <i className="fa-solid fa-file-pdf"></i>
+              <span>مشاركة كـ PDF</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("whatsapp")}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "whatsapp"
+                  ? "bg-[#25D366] text-white shadow-md shadow-emerald-500/20"
+                  : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+              }`}
+            >
+              <i className="fa-brands fa-whatsapp"></i>
+              <span>واتساب برقم</span>
+            </button>
+          </div>
+
+          {/* Status Message Notification */}
           {statusMessage && (
             <motion.div
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-2.5 rounded-xl bg-[#c5834e]/10 border border-[#c5834e]/20 text-xs font-bold text-[#c5834e] flex items-center gap-2"
+              className="p-2.5 rounded-xl bg-[#c5834e]/10 border border-[#c5834e]/20 text-xs font-bold text-[#c5834e] flex items-center gap-2 shrink-0"
             >
-              <i className="fa-solid fa-circle-info"></i>
+              <i className="fa-solid fa-circle-check text-emerald-500"></i>
               <span>{statusMessage}</span>
             </motion.div>
           )}
 
-          {/* PRIMARY FILE SHARING OPTIONS (IMAGE & PDF) */}
-          <div className="space-y-2">
-            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <i className="fa-solid fa-file-export text-[#c5834e]"></i>
-              <span>خيارات المشاركة كملف (صورة / PDF):</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* Option 1: Share as Image */}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleShareAsImage}
-                disabled={isGeneratingImage || isGeneratingPdf}
-                className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/25 cursor-pointer transition-all border border-emerald-400/30 disabled:opacity-50"
-              >
-                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-lg">
+          {/* Scrollable Main Content */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-0.5">
+            {/* ==================================================== */}
+            {/* TAB 1: SHARE AS IMAGE (PNG)                          */}
+            {/* ==================================================== */}
+            {activeTab === "image" && (
+              <div className="space-y-3.5">
+                {/* 1. Primary Big Button: Native Phone Share Sheet */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleNativeShare("image")}
+                  disabled={isProcessing}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/30 cursor-pointer transition-all border border-emerald-400/30 disabled:opacity-50"
+                >
                   <i
                     className={`fa-solid ${
-                      isGeneratingImage ? "fa-spinner fa-spin" : "fa-image"
-                    }`}
+                      isProcessing ? "fa-spinner fa-spin" : "fa-arrow-up-from-bracket"
+                    } text-base`}
                   ></i>
-                </div>
-                <span className="text-sm font-black">مشاركة كصورة (PNG)</span>
-                <span className="text-[10px] text-emerald-100 opacity-90">
-                  لواتساب وإنستجرام وتطبيقات الهاتف
-                </span>
-              </motion.button>
+                  <span>📲 فتح قائمة المشاركة بالهاتف (واتساب، فيس، إنستجرام)</span>
+                </motion.button>
 
-              {/* Option 2: Share as PDF */}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleShareAsPdf}
-                disabled={isGeneratingImage || isGeneratingPdf}
-                className="p-3.5 rounded-2xl bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] text-white font-bold text-xs flex flex-col items-center justify-center gap-1.5 shadow-lg shadow-[#c5834e]/25 cursor-pointer transition-all border border-amber-300/30 disabled:opacity-50"
-              >
-                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-lg">
+                {/* 2. Direct Social Channels Grid */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <i className="fa-solid fa-bolt text-amber-500"></i>
+                    <span>مشاركة سريعة ومباشرة عبر التطبيقات:</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* WhatsApp */}
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={handleWhatsAppShare}
+                      className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md shadow-emerald-500/20 cursor-pointer transition-all"
+                    >
+                      <i className="fa-brands fa-whatsapp text-lg"></i>
+                      <span>واتساب</span>
+                    </motion.button>
+
+                    {/* Instagram */}
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={handleCopyImage}
+                      className="p-2.5 rounded-xl bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md shadow-pink-500/20 cursor-pointer transition-all"
+                      title="نسخ الصورة وحفظها للصقها في إنستجرام"
+                    >
+                      <i className="fa-brands fa-instagram text-lg"></i>
+                      <span>إنستجرام</span>
+                    </motion.button>
+
+                    {/* Facebook */}
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={handleFacebookShare}
+                      className="p-2.5 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md shadow-blue-500/20 cursor-pointer transition-all"
+                    >
+                      <i className="fa-brands fa-facebook text-lg"></i>
+                      <span>فيسبوك</span>
+                    </motion.button>
+
+                    {/* Telegram */}
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={handleTelegramShare}
+                      className="p-2.5 rounded-xl bg-[#229ED9] hover:bg-[#1d8bc0] text-white text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md shadow-sky-500/20 cursor-pointer transition-all"
+                    >
+                      <i className="fa-brands fa-telegram text-lg"></i>
+                      <span>تيليجرام</span>
+                    </motion.button>
+                  </div>
+                </div>
+
+                {/* 3. Action Buttons: Copy Image & Save to Gallery */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleCopyImage}
+                    disabled={isProcessing}
+                    className="py-2.5 px-3 rounded-xl bg-[#c5834e]/15 hover:bg-[#c5834e]/25 text-[#c5834e] dark:text-[#e0a36e] border border-[#c5834e]/30 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    title="نسخ صورة الفاتورة بالكامل للصقها مباشرة في أي محادثة"
+                  >
+                    <i className="fa-solid fa-copy"></i>
+                    <span>نسخ صورة الفاتورة للحافظة</span>
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleSaveToGallery}
+                    disabled={isProcessing}
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-[#1e242c] hover:bg-slate-200 dark:hover:bg-[#252c36] text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all border border-slate-200 dark:border-slate-700"
+                  >
+                    <i className="fa-solid fa-download text-emerald-500"></i>
+                    <span>حفظ بالمعرض والتنزيلات</span>
+                  </motion.button>
+                </div>
+
+                {/* 4. Live Image Preview & Long-Press Helper */}
+                {previewDataUrl && (
+                  <div className="bg-slate-50 dark:bg-[#181c22] border border-slate-200 dark:border-[#2c323f] rounded-2xl p-3 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 font-bold">
+                      <span className="flex items-center gap-1">
+                        <i className="fa-solid fa-eye text-[#c5834e]"></i>
+                        <span>معاينة الصورة الجاهزة:</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        💡 اضغط مطولاً على الصورة للحفظ أو المشاركة
+                      </span>
+                    </div>
+
+                    <div className="flex justify-center bg-white dark:bg-black/40 rounded-xl p-2 border border-slate-200 dark:border-slate-800 max-h-56 overflow-y-auto">
+                      <img
+                        src={previewDataUrl}
+                        alt="معاينة الفاتورة"
+                        className="w-full max-w-sm rounded-lg shadow-sm object-contain select-all"
+                        loading="eager"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ==================================================== */}
+            {/* TAB 2: SHARE AS PDF                                  */}
+            {/* ==================================================== */}
+            {activeTab === "pdf" && (
+              <div className="space-y-3.5">
+                {/* 1. Primary Big Button: Native PDF Share */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleNativeShare("pdf")}
+                  disabled={isProcessing}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#c5834e] to-[#a6632f] hover:from-[#b5733e] hover:to-[#96531f] text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-[#c5834e]/30 cursor-pointer transition-all border border-amber-400/30 disabled:opacity-50"
+                >
                   <i
                     className={`fa-solid ${
-                      isGeneratingPdf ? "fa-spinner fa-spin" : "fa-file-pdf"
-                    }`}
+                      isProcessing ? "fa-spinner fa-spin" : "fa-file-pdf"
+                    } text-base`}
                   ></i>
+                  <span>📲 إرسال ومشاركة ملف الـ PDF عبر الهاتف</span>
+                </motion.button>
+
+                {/* 2. Download PDF */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleSavePdf}
+                  disabled={isProcessing}
+                  className="w-full py-3 px-4 rounded-xl bg-slate-100 dark:bg-[#1e242c] hover:bg-slate-200 dark:hover:bg-[#252c36] text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all border border-slate-200 dark:border-slate-700"
+                >
+                  <i className="fa-solid fa-download text-[#c5834e]"></i>
+                  <span>تنزيل ملف الـ PDF مباشرة على الجهاز</span>
+                </motion.button>
+
+                {/* 3. Direct Social Actions for PDF */}
+                <div className="grid grid-cols-2 gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleWhatsAppShare}
+                    className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <i className="fa-brands fa-whatsapp text-base"></i>
+                    <span>إرسال عبر واتساب</span>
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleTelegramShare}
+                    className="p-2.5 rounded-xl bg-[#229ED9] hover:bg-[#1d8bc0] text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <i className="fa-brands fa-telegram text-base"></i>
+                    <span>تيليجرام</span>
+                  </motion.button>
                 </div>
-                <span className="text-sm font-black">مشاركة كملف PDF</span>
-                <span className="text-[10px] text-amber-100 opacity-90">
-                  مستند كامل جاهز للحفظ والإرسال
-                </span>
-              </motion.button>
-            </div>
-          </div>
 
-          {/* Quick Direct WhatsApp Section */}
-          <div className="bg-slate-50 dark:bg-[#181c22] border border-slate-200 dark:border-[#2c323f] rounded-2xl p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <i className="fa-brands fa-whatsapp text-emerald-500 text-sm"></i>
-                <span>مراسلة واتساب سريعة بالرقم:</span>
-              </label>
-              <span className="text-[10px] text-slate-400">اختياري</span>
-            </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-info"></i>
+                    <span>ملاحظة لمشاركة ملفات الـ PDF:</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    عند الضغط على زر المشاركة من الهاتف، تفتح نافذة النظام لتختار واتساب أو أي تطبيق لإرسال ملف الـ PDF كملف رسمي جاهز للطباعة والقراءة.
+                  </p>
+                </div>
+              </div>
+            )}
 
-            <div className="flex gap-2">
-              <input
-                type="tel"
-                value={customPhone}
-                onChange={(e) => setCustomPhone(e.target.value)}
-                placeholder="مثال: 0912345678"
-                className="flex-1 px-3 py-2 text-xs bg-white dark:bg-[#121418] border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-slate-900 dark:text-white font-mono text-left"
-                dir="ltr"
-              />
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={handleDirectWhatsApp}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer shrink-0"
-              >
-                <i className="fa-brands fa-whatsapp text-sm"></i>
-                <span>فتح واتساب</span>
-              </motion.button>
-            </div>
-          </div>
+            {/* ==================================================== */}
+            {/* TAB 3: WHATSAPP DIRECT                               */}
+            {/* ==================================================== */}
+            {activeTab === "whatsapp" && (
+              <div className="space-y-3.5">
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-3.5 space-y-2.5">
+                  <label className="text-xs font-bold text-emerald-900 dark:text-emerald-300 block flex items-center justify-between">
+                    <span>رقم هاتف المستلم (واتساب):</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                      مع كود الدولة (مثلاً: 218...)
+                    </span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={customPhone}
+                      onChange={(e) => setCustomPhone(e.target.value)}
+                      placeholder="0912345678 أو 218912345678"
+                      className="flex-1 px-3 py-2 text-xs bg-white dark:bg-[#181c22] border border-emerald-300 dark:border-emerald-500/30 rounded-xl outline-none focus:border-emerald-500 text-slate-900 dark:text-white font-mono text-left"
+                      dir="ltr"
+                    />
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={handleWhatsAppShare}
+                      className="px-4 py-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer shrink-0"
+                    >
+                      <i className="fa-brands fa-whatsapp text-sm"></i>
+                      <span>إرسال</span>
+                    </motion.button>
+                  </div>
+                </div>
 
-          {/* Additional text copy / telegram quick links */}
-          <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            <button
-              onClick={() => {
-                soundFx.playClick();
-                shareViaTelegram(
-                  shareText || (order ? generateOrderShareText(order, shopName) : title)
-                );
-              }}
-              className="hover:text-[#229ED9] flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              <i className="fa-brands fa-telegram text-[#229ED9]"></i>
-              <span>مشاركة بتيليجرام</span>
-            </button>
-
-            <button
-              onClick={handleCopyText}
-              className="hover:text-emerald-500 flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              <i className={`fa-solid ${copied ? "fa-check text-emerald-500" : "fa-copy"}`}></i>
-              <span>{copied ? "تم نسخ النص!" : "نسخ ملخص النص"}</span>
-            </button>
+                <div className="flex justify-between items-center text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span>أو نسخ نص الفاتورة:</span>
+                  <button
+                    onClick={handleCopyText}
+                    className="hover:text-emerald-600 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <i
+                      className={`fa-solid ${
+                        copied ? "fa-check text-emerald-500" : "fa-copy"
+                      }`}
+                    ></i>
+                    <span>{copied ? "تم النسخ!" : "نسخ النص"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

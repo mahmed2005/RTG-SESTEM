@@ -196,10 +196,14 @@ function buildOrdersReportHtml(
   `;
 }
 
-// Helper to convert Arabic-Indic numerals (٠-٩) to Western (0-9)
+// Helper to convert Arabic-Indic numerals (٠-٩) and strip Unicode formatting marks
 function toStandardDigits(str: string): string {
   if (!str) return "";
-  return str.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+  return String(str)
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/[\u200E\u200F\u061C\uFEFF\u200B-\u200D]/g, "")
+    .trim();
 }
 
 // Robust timestamp parser for sorting newest-first across all locales and date formats
@@ -285,7 +289,7 @@ function matchesDateFilter(orderDateRaw: string, filterStr: string): boolean {
   }
 
   // Try Date constructor
-  const d = new Date(normalized);
+  const d = new Date(normalized.replace(/[،,]/g, " "));
   if (!isNaN(d.getTime())) {
     return d.getFullYear() === fYear && d.getMonth() + 1 === fMonth && d.getDate() === fDay;
   }

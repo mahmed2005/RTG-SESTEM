@@ -15,6 +15,7 @@ export const DocumentViewerModal: React.FC = () => {
   const [isSharingImage, setIsSharingImage] = useState(false);
   const [isSharingPdf, setIsSharingPdf] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareModalTab, setShareModalTab] = useState<"image" | "pdf">("image");
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   const documentContentRef = useRef<HTMLDivElement | null>(null);
@@ -54,72 +55,18 @@ export const DocumentViewerModal: React.FC = () => {
     printService.closeDocument();
   };
 
-  // Direct 1-Click Share as Image (PNG)
-  const handleDirectShareImage = async () => {
-    if (!documentContentRef.current) return;
-    try {
-      soundFx.playClick();
-      setIsSharingImage(true);
-      showNotification("جاري تحويل التقرير إلى صورة عالية الدقة...");
-
-      const blob = await htmlElementToImageBlob(documentContentRef.current);
-      const safeName = (doc.title || "تقرير-مبيعات")
-        .replace(/[^\w\u0600-\u06FF-]/g, "_")
-        .trim();
-      const res = await shareFileOrDownload(
-        blob,
-        `${safeName}.png`,
-        "image/png",
-        doc.title,
-        `صورة ${doc.title} - RTG-SYSTEM`
-      );
-
-      soundFx.playSuccess();
-      if (res.sharedViaNative) {
-        showNotification("✓ تم فتح نافذة المشاركة كصورة");
-      } else if (res.downloaded) {
-        showNotification("✓ تم حفظ الصورة بجهازك! يمكنك إرسالها الآن للمستلم");
-      }
-    } catch (err) {
-      console.error("Direct image share error:", err);
-      showNotification("تعذر إنشاء الصورة، يرجى استخدام زر المشاركة العادي");
-    } finally {
-      setIsSharingImage(false);
-    }
+  // Direct 1-Click Share as Image (PNG) -> Opens Social Apps Share Dialog
+  const handleDirectShareImage = () => {
+    soundFx.playClick();
+    setShareModalTab("image");
+    setIsShareModalOpen(true);
   };
 
-  // Direct 1-Click Share as PDF
-  const handleDirectSharePdf = async () => {
-    if (!documentContentRef.current) return;
-    try {
-      soundFx.playClick();
-      setIsSharingPdf(true);
-      showNotification("جاري تجهيز وتصدير ملف الـ PDF...");
-
-      const blob = await htmlElementToPdfBlob(documentContentRef.current, doc.title);
-      const safeName = (doc.title || "تقرير-مبيعات")
-        .replace(/[^\w\u0600-\u06FF-]/g, "_")
-        .trim();
-      const res = await shareFileOrDownload(
-        blob,
-        `${safeName}.pdf`,
-        "application/pdf",
-        doc.title,
-        `ملف PDF: ${doc.title} - RTG-SYSTEM`
-      );
-
-      soundFx.playSuccess();
-      if (res.sharedViaNative) {
-        showNotification("✓ تم فتح قائمة المشاركة كملف PDF");
-      } else if (res.downloaded) {
-        showNotification("✓ تم تنزيل ملف الـ PDF بنجاح! يمكنك إرساله للمستلم");
-      }
-    } catch (err) {
-      console.error("Direct PDF share error:", err);
-      showNotification("تعذر إنشاء ملف الـ PDF، يرجى المحاولة مرة أخرى");
-    } finally {
-      setIsSharingPdf(false);
-    }
+  // Direct 1-Click Share as PDF -> Opens PDF Share Dialog
+  const handleDirectSharePdf = () => {
+    soundFx.playClick();
+    setShareModalTab("pdf");
+    setIsShareModalOpen(true);
   };
 
   return (
@@ -268,6 +215,7 @@ export const DocumentViewerModal: React.FC = () => {
         targetElementId="active-document-content"
         htmlContent={doc.html}
         fileName={doc.title}
+        initialTab={shareModalTab}
         subtitle="شارك كصورة واضحة أو كملف PDF رسمي عبر واتساب وإنستجرام"
       />
     </AnimatePresence>
